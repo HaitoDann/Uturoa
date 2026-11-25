@@ -1,0 +1,22 @@
+[package]
+name = "uturoa-crypto"
+description = "Hachage BLAKE3, signatures typées et adresses utu1 d'Uturoa"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bech32.workspace = true
+blake3.workspace = true
+borsh.workspace = true
+ed25519-dalek.workspace = true
+rand_core.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+hex.workspace = true

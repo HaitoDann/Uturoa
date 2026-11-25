@@ -1,0 +1,25 @@
+[package]
+name = "uturoa-keystore"
+description = "Fichiers de clés chiffrés et encodages texte d'Uturoa"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+uturoa-crypto.workspace = true
+anyhow.workspace = true
+argon2.workspace = true
+borsh.workspace = true
+chacha20poly1305.workspace = true
+hex.workspace = true
+rand_core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

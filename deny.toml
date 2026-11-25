@@ -1,0 +1,40 @@
+# Contrôle des dépendances (cargo-deny), exécuté par la CI :
+#   cargo deny check
+# - advisories : aucune faille connue (base RustSec) n'est tolérée ;
+# - licenses   : seulement des licences compatibles avec Apache-2.0 ;
+# - bans       : doublons signalés sans bloquer ;
+# - sources    : uniquement crates.io.
+
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "Zlib",
+    "Unlicense",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "MPL-2.0",
+]
+
+[bans]
+multiple-versions = "allow"
+# Les dépendances internes du dépôt (path = "…") n'ont pas de version.
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
