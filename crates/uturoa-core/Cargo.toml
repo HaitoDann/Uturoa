@@ -1,0 +1,16 @@
+[package]
+name = "uturoa-core"
+description = "Types du protocole Uturoa : transactions, parts de frappe, blocs, votes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+uturoa-crypto.workspace = true
+borsh.workspace = true
+thiserror.workspace = true

@@ -16,6 +16,8 @@ Pré-alpha. Le dépôt contient pour l'instant :
 | Crate | Rôle |
 |---|---|
 | `uturoa-crypto` | BLAKE3, signatures ed25519 typées, adresses `utu1…`, arbre de Merkle |
+| `uturoa-core` | Types du protocole : transactions, parts de frappe, blocs, votes, constantes d'émission |
+| `uturoa-consensus` | Moteur de consensus BFT de type Tendermint |
 | `uturoa-keystore` | Fichiers de clés chiffrés (Argon2 et ChaCha20-Poly1305) |
 
 Rien n'est déployé. Aucune pièce n'existe.

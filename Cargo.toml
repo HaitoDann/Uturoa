@@ -1,6 +1,8 @@
 [workspace]
 members = [
     "crates/uturoa-crypto",
+    "crates/uturoa-core",
+    "crates/uturoa-consensus",
     "crates/uturoa-keystore",
 ]
 resolver = "3"
@@ -15,6 +17,8 @@ repository = "https://github.com/HaitoDann/Uturoa"
 [workspace.dependencies]
 uturoa-crypto = { path = "crates/uturoa-crypto" }
 uturoa-keystore = { path = "crates/uturoa-keystore" }
+uturoa-core = { path = "crates/uturoa-core" }
+uturoa-consensus = { path = "crates/uturoa-consensus" }
 anyhow = "1"
 argon2 = "0.5"
 bech32 = "0.9"

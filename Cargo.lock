@@ -714,6 +714,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "uturoa-consensus"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "borsh",
+ "thiserror",
+ "uturoa-core",
+ "uturoa-crypto",
+]
+
+[[package]]
+name = "uturoa-core"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "thiserror",
+ "uturoa-crypto",
+]
+
+[[package]]
 name = "uturoa-crypto"
 version = "0.1.0"
 dependencies = [

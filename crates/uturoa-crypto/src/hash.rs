@@ -24,6 +24,8 @@ pub enum Domain {
     Validators,
     TxApproval,
     TableKey,
+    MintShare,
+    Commit,
 }
 
 impl Domain {
@@ -44,6 +46,8 @@ impl Domain {
             Domain::Validators => "utu/validators",
             Domain::TxApproval => "utu/tx/approval",
             Domain::TableKey => "utu/table/key",
+            Domain::MintShare => "utu/mint",
+            Domain::Commit => "utu/commit",
         }
     }
 }
@@ -93,7 +97,7 @@ pub fn hash_tagged_parts(domain: Domain, parts: &[&[u8]]) -> Hash {
 mod tests {
     use super::*;
 
-    const ALL: [Domain; 15] = [
+    const ALL: [Domain; 17] = [
         Domain::Address,
         Domain::State,
         Domain::Tx,
@@ -109,6 +113,8 @@ mod tests {
         Domain::Validators,
         Domain::TxApproval,
         Domain::TableKey,
+        Domain::MintShare,
+        Domain::Commit,
     ];
 
     /// Vecteur officiel : BLAKE3("abc"). Fige l'algorithme.

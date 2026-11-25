@@ -1,0 +1,21 @@
+[package]
+name = "uturoa-consensus"
+description = "Moteur de consensus BFT de type Tendermint d'Uturoa"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+uturoa-crypto.workspace = true
+uturoa-core.workspace = true
+blake3.workspace = true
+borsh.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+borsh.workspace = true

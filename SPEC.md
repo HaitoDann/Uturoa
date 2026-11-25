@@ -29,8 +29,8 @@ Une monnaie, une fonction : envoyer de la valeur, vite et presque gratuitement.
 Étiquettes en vigueur : `utu/address`, `utu/state`, `utu/tx`, `utu/txid`,
 `utu/block`, `utu/vote`, `utu/proposal`, `utu/merkle/leaf`,
 `utu/merkle/node`, `utu/merkle/empty`, `utu/smt/leaf`, `utu/smt/node`,
-`utu/validators`, `utu/tx/approval`, `utu/table/key`. Les étiquettes de la
-frappe et de la forge seront ajoutées avec leur lot.
+`utu/validators`, `utu/tx/approval`, `utu/table/key`, `utu/mint` (parts de
+frappe), `utu/commit` (certificat du bloc précédent).
 
 ## 3. Unités
 
@@ -45,6 +45,11 @@ frappe et de la forge seront ajoutées avec leur lot.
 - Bloc visé : 2 secondes, soit environ 15 768 000 blocs par an.
 - Chaque bloc porte le certificat du bloc précédent (`last_commit`), avec
   toutes les signatures reçues. Il sert à mesurer la présence des validateurs.
+  Son empreinte `H("utu/commit" ‖ certificat)` est dans l'en-tête
+  (`last_commit_hash`, zéros au premier bloc).
+- Contenu d'un bloc : l'en-tête, `last_commit`, les transactions, puis les
+  parts de frappe. `tx_root` est la racine de Merkle des identifiants des
+  transactions puis des parts, dans l'ordre du bloc.
 
 ### 4.1 Phase 1 : preuve d'autorité
 
@@ -80,11 +85,16 @@ frappe et de la forge seront ajoutées avec leur lot.
 
 - Algorithme : RandomX.
 - Les mineurs ne produisent pas de blocs. Ils soumettent des **parts de
-  frappe** sous forme de transactions `MintShare`.
-- Une part contient : l'adresse du bénéficiaire, l'empreinte d'un bloc récent
-  (fenêtre de validité **à trancher**, de l'ordre de 64 blocs) et un nonce.
-  Elle n'est valide que si son empreinte RandomX est sous la cible de
-  difficulté.
+  frappe** (`MintShare`), incluses dans les blocs à côté des transactions.
+- Une part **n'est pas une transaction** : elle n'a ni émetteur, ni nonce, ni
+  frais, pour qu'un mineur sans aucune pièce puisse frapper. Le bénéficiaire
+  fait partie des données hachées : copier une part en changeant le
+  bénéficiaire la rend invalide.
+- Une part contient : l'identifiant de chaîne, l'adresse du bénéficiaire, la
+  hauteur et l'empreinte d'un bloc récent (fenêtre de validité **à
+  trancher**, de l'ordre de 64 blocs) et un nonce. Elle n'est valide que si
+  l'empreinte RandomX de `"utu/mint" ‖ part` est sous la cible de difficulté.
+- Identifiant d'une part : `H("utu/mint" ‖ part)`.
 - Une part ne peut être acceptée qu'une seule fois.
 - Quantité frappée : 150 000 000 pièces sur la phase, soit 1 902 587 519
   unités par bloc (quantité entière, constante). Le reste de la division reste
@@ -93,7 +103,7 @@ frappe et de la forge seront ajoutées avec leur lot.
   répartie entre les parts valides de la période, au prorata.
 - Nombre de parts par bloc plafonné ; difficulté ajustée pour viser un nombre
   cible de parts par période. Valeurs **à trancher** lors du lot 3.
-- `MintShare` est refusée après la bascule.
+- Les parts sont refusées après la bascule.
 
 ## 6. Phase 2 : melt & forge
 
@@ -134,14 +144,20 @@ est basse.
 
 | Transaction | Rôle |
 |---|---|
-| `Transfer` | Envoyer, avec un mémo optionnel de 64 octets au plus |
-| `BatchTransfer` | Payer plusieurs destinataires |
-| `ConfigureMultisig` | Rendre un compte multisignature (`m` sur `n`) |
-| `Delegate`, `Undelegate` | Déléguer son stake à un validateur |
-| `RegisterValidator`, `UpdateValidatorInfo`, `Unjail`, `Leave` | Cycle de vie d'un validateur |
-| `ReportEquivocation` | Preuve de double signature |
-| `SignalUpgrade` | Signalement d'une version de protocole |
-| `MintShare` | Part de frappe, phase 1 seulement |
+| `Transfer` (0x01) | Envoyer, avec un mémo optionnel de 64 octets au plus |
+| `BatchTransfer` (0x02) | Payer jusqu'à 100 destinataires ; un frais minimal par tranche de 10 paiements |
+| `ConfigureMultisig` (0x03) | Rendre un compte multisignature (`m` sur `n`, 10 signataires au plus), changer ou retirer la règle |
+| `Delegate` (0x04), `Undelegate` (0x05) | Déléguer son stake à un validateur |
+| `RegisterValidator` (0x06), `UpdateValidatorInfo` (0x07), `Unjail` (0x08), `Leave` (0x09) | Cycle de vie d'un validateur |
+| `ReportEquivocation` (0x0A) | Preuve de double signature |
+| `SignalUpgrade` (0x0B) | Signalement d'une version de protocole |
+
+Autorisation d'une transaction :
+
+- compte ordinaire : signature ed25519 de `"utu/tx" ‖ transaction`, la clé
+  publique étant jointe tant que l'état ne la connaît pas ;
+- compte multisignature : approbations de `"utu/tx/approval" ‖ transaction`
+  par au moins `m` signataires, indices strictement croissants.
 
 Toute évolution des règles passe par une nouvelle version de protocole,
 activée quand plus des 2/3 du pouvoir de vote l'ont signalée. Il n'existe

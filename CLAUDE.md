@@ -34,6 +34,8 @@ Monnaie minimaliste en Rust : une seule fonction, envoyer de la valeur.
 | Crate | Rôle |
 |---|---|
 | `uturoa-crypto` | Clés ed25519 typées, adresses `utu1…`, BLAKE3, Merkle, étiquettes de domaine `utu/…` |
+| `uturoa-core` | Montants et constantes d'émission, comptes et multisignatures, transactions, parts de frappe, blocs, votes, paramètres |
+| `uturoa-consensus` | Moteur Tendermint (machine à états pure), garde anti-double signature, preuves d'équivoque |
 | `uturoa-keystore` | Fichiers de clés chiffrés ; mot de passe par `UTUROA_KEY_PASSWORD` ou fichier |
 
 ## 4. Commandes
@@ -61,7 +63,7 @@ cargo deny check                                        # failles et licences
 | Lot | Contenu | État |
 |---|---|---|
 | 0 | Socle : espace de travail, crypto, keystore, CI, `SPEC.md` | fait |
-| 1 | `uturoa-core` : blocs, votes, paramètres, transactions de la liste fermée ; moteur de consensus | à faire |
+| 1 | `uturoa-core` : blocs, votes, paramètres, transactions de la liste fermée ; moteur de consensus | fait |
 | 2 | État : comptes, envoi, multisignatures, frais, melt & forge | à faire |
 | 3 | Frappe RandomX : `MintShare`, partage par période, difficulté | à faire |
 | 4 | Preuve d'enjeu : délégation, sélection, plafond de vote, sanctions, bascule | à faire |
