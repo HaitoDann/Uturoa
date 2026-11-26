@@ -1,0 +1,16 @@
+[package]
+name = "uturoa-state"
+description = "Machine d'état d'Uturoa : comptes, envois, multisignatures, frais, melt & forge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+uturoa-crypto.workspace = true
+uturoa-core.workspace = true
+thiserror.workspace = true

@@ -10,16 +10,14 @@ pub const MAX_MEMO_BYTES: usize = 64;
 /// Nombre maximal de paiements d'un paiement groupé.
 pub const MAX_BATCH_PAYMENTS: usize = 100;
 
-/// Paiements couverts par un frais minimal dans un paiement groupé.
-pub const PAYMENTS_PER_FEE: usize = 10;
-
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct Transaction {
     pub chain_id: String,
     pub sender: Address,
     /// Doit valoir `nonce du compte + 1`.
     pub nonce: u64,
-    /// Au moins les frais minimaux : 80 % fondus, 20 % au proposeur.
+    /// Au moins `frais de base par octet × taille de la transaction signée`.
+    /// 80 % fondus, 20 % au proposeur.
     pub fee: Amount,
     pub body: TxBody,
 }
@@ -87,18 +85,6 @@ pub struct ValidatorInfo {
 }
 
 impl TxBody {
-    /// Frais minimaux pour ce corps : un paiement groupé paie un frais minimal
-    /// par tranche de [`PAYMENTS_PER_FEE`] paiements.
-    pub fn min_fee(&self, min_fee: Amount) -> Amount {
-        match self {
-            TxBody::BatchTransfer { payments } => {
-                let units = payments.len().div_ceil(PAYMENTS_PER_FEE).max(1);
-                min_fee.saturating_mul(Amount::try_from(units).unwrap_or(Amount::MAX))
-            }
-            _ => min_fee,
-        }
-    }
-
     /// Les mémos respectent-ils [`MAX_MEMO_BYTES`] ?
     pub fn memos_fit(&self) -> bool {
         let fits = |m: &Option<Vec<u8>>| m.as_ref().is_none_or(|m| m.len() <= MAX_MEMO_BYTES);
@@ -353,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn memo_limit_and_batch_fee() {
+    fn memo_limit() {
         let mut body = TxBody::Transfer {
             to: Address::from_bytes([1; 20]),
             amount: 1,
@@ -366,24 +352,5 @@ mod tests {
             memo: Some(vec![0; 65]),
         };
         assert!(!body.memos_fit());
-        let p = Payment {
-            to: Address::from_bytes([1; 20]),
-            amount: 1,
-            memo: None,
-        };
-        assert_eq!(
-            TxBody::BatchTransfer {
-                payments: vec![p.clone(); 10]
-            }
-            .min_fee(7),
-            7
-        );
-        assert_eq!(
-            TxBody::BatchTransfer {
-                payments: vec![p; 11]
-            }
-            .min_fee(7),
-            14
-        );
     }
 }

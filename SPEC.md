@@ -34,8 +34,13 @@ frappe), `utu/commit` (certificat du bloc précédent).
 
 ## 3. Unités
 
-- 1 pièce = 10^8 unités.
-- `PLAFOND` = 10^9 pièces = 10^17 unités (tient dans un `u64`).
+- 1 pièce = 10^9 unités (9 décimales).
+- `PLAFOND` = 10^9 pièces = 10^18 unités (tient dans un `u64`, marge d'environ
+  18 fois). Les calculs au prorata se font en 128 bits.
+- **Réserve minimale** : 0,01 pièce. Un compte neuf doit recevoir au moins la
+  réserve ; le solde d'un compte est soit nul, soit au moins égal à la
+  réserve. Un compte n'est jamais supprimé, même à zéro : son nonce est
+  conservé, ce qui empêche de rejouer ses anciennes transactions.
 - Toute arithmétique sur les montants est vérifiée (`checked_*`). Un
   dépassement est une erreur, jamais un bouclage.
 
@@ -96,7 +101,7 @@ frappe), `utu/commit` (certificat du bloc précédent).
   l'empreinte RandomX de `"utu/mint" ‖ part` est sous la cible de difficulté.
 - Identifiant d'une part : `H("utu/mint" ‖ part)`.
 - Une part ne peut être acceptée qu'une seule fois.
-- Quantité frappée : 150 000 000 pièces sur la phase, soit 1 902 587 519
+- Quantité frappée : 150 000 000 pièces sur la phase, soit 19 025 875 190
   unités par bloc (quantité entière, constante). Le reste de la division reste
   dans le réservoir.
 - Partage : toutes les 300 blocs (10 minutes), la récompense accumulée est
@@ -135,17 +140,26 @@ est basse.
 
 ## 7. Frais
 
-- Frais de base dynamiques : ils montent quand les blocs sont pleins et
-  baissent quand ils sont vides, avec un plancher et un supplément par octet.
-- Répartition : 80 % fondus, 20 % au proposeur.
-- Formule exacte et plancher **à trancher** lors du lot 2.
+- **Frais minimaux** d'une transaction = `frais de base par octet × taille de
+  la transaction signée`. Un envoi simple (environ 200 octets) coûte environ
+  0,0001 pièce quand le réseau est calme.
+- **Frais de base** : identique pour toutes les transactions d'un bloc. Après
+  chaque bloc :
+  - cible = la moitié de la taille maximale d'un bloc ;
+  - au-dessus de la cible, il monte de `base × écart / cible / 8` (au moins
+    une unité) ; en dessous, il baisse d'autant ; soit 12,5 % au plus par
+    bloc ;
+  - plancher : 500 unités par octet.
+- **Priorité** : on peut payer plus que les frais minimaux.
+- **Répartition** de la totalité des frais : 80 % fondus (retour au
+  réservoir), 20 % au proposeur, l'arrondi allant au proposeur.
 
 ## 8. Transactions (liste fermée)
 
 | Transaction | Rôle |
 |---|---|
-| `Transfer` (0x01) | Envoyer, avec un mémo optionnel de 64 octets au plus |
-| `BatchTransfer` (0x02) | Payer jusqu'à 100 destinataires ; un frais minimal par tranche de 10 paiements |
+| `Transfer` (0x01) | Envoyer, avec un mémo optionnel de 64 octets au plus. Montant non nul, pas d'envoi à soi-même |
+| `BatchTransfer` (0x02) | Payer de 1 à 100 destinataires |
 | `ConfigureMultisig` (0x03) | Rendre un compte multisignature (`m` sur `n`, 10 signataires au plus), changer ou retirer la règle |
 | `Delegate` (0x04), `Undelegate` (0x05) | Déléguer son stake à un validateur |
 | `RegisterValidator` (0x06), `UpdateValidatorInfo` (0x07), `Unjail` (0x08), `Leave` (0x09) | Cycle de vie d'un validateur |

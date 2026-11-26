@@ -3,6 +3,7 @@ members = [
     "crates/uturoa-crypto",
     "crates/uturoa-core",
     "crates/uturoa-consensus",
+    "crates/uturoa-state",
     "crates/uturoa-keystore",
 ]
 resolver = "3"
@@ -19,6 +20,7 @@ uturoa-crypto = { path = "crates/uturoa-crypto" }
 uturoa-keystore = { path = "crates/uturoa-keystore" }
 uturoa-core = { path = "crates/uturoa-core" }
 uturoa-consensus = { path = "crates/uturoa-consensus" }
+uturoa-state = { path = "crates/uturoa-state" }
 anyhow = "1"
 argon2 = "0.5"
 bech32 = "0.9"

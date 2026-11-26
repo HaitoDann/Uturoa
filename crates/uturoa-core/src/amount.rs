@@ -1,12 +1,12 @@
 //! Unités monétaires et constantes d'émission (SPEC §3, §5, §6).
 
-/// Montant en unités : 1 pièce = 10⁸ unités.
+/// Montant en unités : 1 pièce = 10⁹ unités.
 pub type Amount = u64;
 
-/// Nombre d'unités dans une pièce (8 décimales).
-pub const UNITS_PER_COIN: Amount = 100_000_000;
+/// Nombre d'unités dans une pièce (9 décimales).
+pub const UNITS_PER_COIN: Amount = 1_000_000_000;
 
-/// Plafond absolu : 10⁹ pièces, soit 10¹⁷ unités.
+/// Plafond absolu : 10⁹ pièces, soit 10¹⁸ unités.
 pub const MAX_SUPPLY: Amount = 1_000_000_000 * UNITS_PER_COIN;
 
 /// Durée de la phase de frappe, en blocs (6 mois de blocs de 2 s).
@@ -18,12 +18,22 @@ pub const MINT_PHASE_TOTAL: Amount = 150_000_000 * UNITS_PER_COIN;
 /// Unités frappées par bloc pendant la phase 1 (division entière).
 pub const MINT_PER_BLOCK: Amount = MINT_PHASE_TOTAL / MINT_PHASE_BLOCKS;
 
+/// Réserve minimale d'un compte : 0,01 pièce (SPEC §3).
+pub const MIN_RESERVE: Amount = UNITS_PER_COIN / 100;
+
+/// Plancher du frais de base, par octet de transaction : un envoi simple
+/// (environ 200 octets) coûte alors environ 0,0001 pièce (SPEC §7).
+pub const MIN_BASE_FEE_PER_BYTE: Amount = 500;
+
+/// Part des frais fondue, en pourcentage ; le reste va au proposeur (SPEC §7).
+pub const MELT_PERCENT: Amount = 80;
+
 /// Décalage de la forge : `forge = réservoir >> FORGE_SHIFT`.
 pub const FORGE_SHIFT: u32 = 29;
 
 // Vérifications à la compilation.
-const _: () = assert!(MAX_SUPPLY < u64::MAX / 100);
-const _: () = assert!(MINT_PER_BLOCK == 1_902_587_519);
+const _: () = assert!(MAX_SUPPLY < u64::MAX / 18);
+const _: () = assert!(MINT_PER_BLOCK == 19_025_875_190);
 const _: () =
     assert!(MINT_PER_BLOCK as u128 * MINT_PHASE_BLOCKS as u128 <= MINT_PHASE_TOTAL as u128);
 
@@ -40,8 +50,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn supply_is_ten_to_the_seventeen() {
-        assert_eq!(MAX_SUPPLY, 10u64.pow(17));
+    fn supply_is_ten_to_the_eighteen() {
+        assert_eq!(MAX_SUPPLY, 10u64.pow(18));
     }
 
     #[test]

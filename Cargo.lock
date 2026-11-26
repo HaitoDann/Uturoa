@@ -763,6 +763,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "uturoa-state"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+ "uturoa-core",
+ "uturoa-crypto",
+]
+
+[[package]]
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

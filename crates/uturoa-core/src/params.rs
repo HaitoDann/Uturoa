@@ -1,13 +1,10 @@
 //! Paramètres du protocole. Il n'existe aucune clé d'administration : ils ne
 //! changent que par une nouvelle version de protocole.
 
-use crate::Amount;
 use borsh::{BorshDeserialize, BorshSerialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct Params {
-    /// Plancher des frais d'une transaction (SPEC §7, formule dynamique au lot 2).
-    pub min_fee: Amount,
     pub max_block_txs: u64,
     /// Nombre maximal de parts de frappe par bloc (SPEC §5, à régler au lot 3).
     pub max_block_shares: u64,
@@ -23,7 +20,6 @@ pub struct Params {
 impl Default for Params {
     fn default() -> Self {
         Self {
-            min_fee: 10_000,
             max_block_txs: 5_000,
             max_block_shares: 500,
             max_block_bytes: 4 * 1024 * 1024,

@@ -11,8 +11,8 @@ pub mod transaction;
 
 pub use account::{Account, MAX_MULTISIG_SIGNERS, Multisig};
 pub use amount::{
-    Amount, FORGE_SHIFT, MAX_SUPPLY, MINT_PER_BLOCK, MINT_PHASE_BLOCKS, MINT_PHASE_TOTAL,
-    UNITS_PER_COIN, forge_amount,
+    Amount, FORGE_SHIFT, MAX_SUPPLY, MELT_PERCENT, MIN_BASE_FEE_PER_BYTE, MIN_RESERVE,
+    MINT_PER_BLOCK, MINT_PHASE_BLOCKS, MINT_PHASE_TOTAL, UNITS_PER_COIN, forge_amount,
 };
 pub use block::{Block, BlockHeader};
 pub use consensus::{CommitCertificate, Vote, VoteKind, quorum};
