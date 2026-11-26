@@ -10,9 +10,33 @@ use uturoa_core::{
     UNITS_PER_COIN, encode, forge_amount,
 };
 use uturoa_crypto::KeyPair;
-use uturoa_state::{BlockError, State, TxError, block_issuance};
+use uturoa_state::{BlockError, BlockInput, PowHasher, State, TxError, block_issuance};
 
 const CHAIN: &str = "utu-test";
+
+/// Preuve de travail factice et déterministe pour les tests.
+struct FakePow;
+impl PowHasher for FakePow {
+    fn hash(&self, seed: &uturoa_core::Hash, input: &[u8]) -> uturoa_core::Hash {
+        uturoa_crypto::hash_tagged_parts(uturoa_crypto::Domain::MintShare, &[seed, input])
+    }
+}
+
+fn block<'a>(
+    height: u64,
+    txs: &'a [SignedTransaction],
+    proposer: &'a Address,
+    bytes: u64,
+) -> BlockInput<'a> {
+    BlockInput {
+        height,
+        parent_hash: [height as u8; 32],
+        txs,
+        shares: &[],
+        proposer,
+        block_bytes: bytes,
+    }
+}
 
 struct User {
     kp: KeyPair,
@@ -330,18 +354,19 @@ fn blocks_are_atomic_and_issue_units() {
     let good = alice.tx(&s, transfer(bob.addr, MIN_RESERVE), true);
     let bad = alice.tx(&s, transfer(bob.addr, 1_000 * UNITS_PER_COIN), false);
     let before = s.clone();
-    let err = s.apply_block(1, &[good.clone(), bad], &p, 1_000);
+    let err = s.apply_block(&block(1, &[good.clone(), bad], &p, 1_000), &FakePow);
     assert!(matches!(err, Err(BlockError::InvalidTx { index: 1, .. })));
     assert_eq!(s, before);
 
     assert!(matches!(
-        s.apply_block(2, &[], &p, 0),
+        s.apply_block(&block(2, &[], &p, 0), &FakePow),
         Err(BlockError::BadHeight { .. })
     ));
-    s.apply_block(1, &[good], &p, encode(&()).len() as u64)
+    s.apply_block(&block(1, &[good], &p, encode(&()).len() as u64), &FakePow)
         .unwrap();
     assert_eq!(s.height, 1);
-    assert_eq!(s.pending_rewards(), MINT_PER_BLOCK);
+    assert_eq!(s.mint().pot(), MINT_PER_BLOCK);
+    assert_eq!(s.pending_rewards(), 0);
     assert!(s.check_invariant());
 }
 
@@ -350,13 +375,13 @@ fn base_fee_follows_block_fullness() {
     let mut s = State::genesis(CHAIN, Params::default());
     let p = Address::from_bytes([9; 20]);
     let max = s.params.max_block_bytes;
-    s.apply_block(1, &[], &p, max).unwrap();
+    s.apply_block(&block(1, &[], &p, max), &FakePow).unwrap();
     let up = s.base_fee_per_byte();
     assert!(up > MIN_BASE_FEE_PER_BYTE);
-    s.apply_block(2, &[], &p, 0).unwrap();
+    s.apply_block(&block(2, &[], &p, 0), &FakePow).unwrap();
     assert!(s.base_fee_per_byte() < up);
     for h in 3..100 {
-        s.apply_block(h, &[], &p, 0).unwrap();
+        s.apply_block(&block(h, &[], &p, 0), &FakePow).unwrap();
     }
     assert_eq!(s.base_fee_per_byte(), MIN_BASE_FEE_PER_BYTE);
 }
@@ -370,10 +395,10 @@ fn issuance_switches_from_mint_to_forge_and_respects_cap() {
         block_issuance(MINT_PHASE_BLOCKS + 1, after),
         forge_amount(after)
     );
-    // Environ 1,58 pièce par bloc juste après la bascule.
+    // Environ 9,5 pièces par bloc juste après la bascule.
     let f = forge_amount(after);
     assert!(
-        f > 158 * UNITS_PER_COIN / 100 && f < 159 * UNITS_PER_COIN / 100,
+        f > 949 * UNITS_PER_COIN / 100 && f < 950 * UNITS_PER_COIN / 100,
         "{f}"
     );
     assert_eq!(block_issuance(1, MAX_SUPPLY - 5), 5);

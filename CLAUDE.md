@@ -18,12 +18,15 @@
 
 Monnaie minimaliste en Rust : une seule fonction, envoyer de la valeur.
 
-- Phase 1 (6 mois) : preuve d'autorité et frappe RandomX par parts
-  (`MintShare`), 150 M de pièces.
+- Blocs de 12 s. **Toute l'émission est comptée en blocs** : changer la durée
+  d'un bloc exige d'ajuster en même temps `MINT_PHASE_BLOCKS`,
+  `MINT_PER_BLOCK` et `FORGE_DIVISOR` (version de protocole).
+- Phase 1 (6 mois, 1 314 000 blocs) : preuve d'autorité et frappe RandomX par
+  parts (`MintShare`), 150 M de pièces partagées tous les 50 blocs.
 - Bascule vers la preuve d'enjeu par simple changement de règle de sélection
   des validateurs.
 - Phase 2 : preuve d'enjeu avec délégation, plafond de 10 % de vote par
-  validateur, économie « melt & forge » (`forge = réservoir >> 29`, frais
+  validateur, économie « melt & forge » (`forge = réservoir / 89 478 485`, frais
   80 % fondus et 20 % au proposeur).
 - Consensus BFT de type **Tendermint**. Ce n'est pas un algorithme maison :
   ne jamais le présenter comme tel.
@@ -36,7 +39,8 @@ Monnaie minimaliste en Rust : une seule fonction, envoyer de la valeur.
 | `uturoa-crypto` | Clés ed25519 typées, adresses `utu1…`, BLAKE3, Merkle, étiquettes de domaine `utu/…` |
 | `uturoa-core` | Montants et constantes d'émission, comptes et multisignatures, transactions, parts de frappe, blocs, votes, paramètres |
 | `uturoa-consensus` | Moteur Tendermint (machine à états pure), garde anti-double signature, preuves d'équivoque |
-| `uturoa-state` | Machine d'état : comptes, réserve, envois, multisignatures, frais dynamiques, melt, émission (frappe puis forge) mise de côté dans `pending_rewards` |
+| `uturoa-state` | Machine d'état : comptes, réserve, envois, multisignatures, frais dynamiques, melt, frappe (parts, partage, difficulté ; RandomX abstrait par `PowHasher`), forge mise de côté dans `pending_rewards` |
+| `uturoa-pow` | RandomX (crate `randomx-rs`, C++ : il faut CMake et un compilateur C++) : vérification en mode léger et minage |
 | `uturoa-keystore` | Fichiers de clés chiffrés ; mot de passe par `UTUROA_KEY_PASSWORD` ou fichier |
 
 ## 4. Commandes
@@ -46,6 +50,7 @@ cargo fmt --all                                         # toujours avant un comm
 cargo clippy -q --workspace --all-targets -- -D warnings
 cargo test -q --workspace
 cargo deny check                                        # failles et licences
+cargo test -q --release -p uturoa-state --test mint -- --ignored   # parcourt toute la phase de frappe
 ```
 
 ## 5. Conventions
@@ -65,8 +70,11 @@ cargo deny check                                        # failles et licences
   recalcule la racine de tous les comptes : simple et correct, mais en O(n).
   À remplacer par un arbre de Merkle incrémental et un journal de
   modifications au lot 5 (nœud).
-- Les unités émises s'accumulent dans `pending_rewards` : leur partage
-  viendra aux lots 3 (parts de frappe) et 4 (validateurs et délégants).
+- Les unités forgées s'accumulent dans `pending_rewards` : leur partage entre
+  validateurs et délégants viendra au lot 4.
+- Si RandomX échoue localement, `RandomXHasher` renvoie une empreinte qui ne
+  satisfait aucune cible : le nœud refuse la part (risque de blocage, jamais
+  d'acceptation à tort).
 - Les transactions de validation (0x04 à 0x0B) renvoient `NotYetSupported`
   jusqu'au lot 4.
 
@@ -77,7 +85,7 @@ cargo deny check                                        # failles et licences
 | 0 | Socle : espace de travail, crypto, keystore, CI, `SPEC.md` | fait |
 | 1 | `uturoa-core` : blocs, votes, paramètres, transactions de la liste fermée ; moteur de consensus | fait |
 | 2 | État : comptes, envoi, multisignatures, frais, melt & forge | fait |
-| 3 | Frappe RandomX : `MintShare`, partage par période, difficulté | à faire |
+| 3 | Frappe RandomX : `MintShare`, partage par période, difficulté | fait |
 | 4 | Preuve d'enjeu : délégation, sélection, plafond de vote, sanctions, bascule | à faire |
 | 5 | Nœud : réseau, stockage, synchronisation par instantané, API, explorateur | à faire |
 | 6 | Portefeuilles (bureau avec mineur intégré, mobile) | à faire |

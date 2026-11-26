@@ -1,0 +1,19 @@
+[package]
+name = "uturoa-pow"
+description = "Preuve de travail RandomX d'Uturoa : vérification et minage des parts de frappe"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+uturoa-core.workspace = true
+uturoa-state.workspace = true
+randomx-rs.workspace = true
+
+[dev-dependencies]
+uturoa-crypto.workspace = true

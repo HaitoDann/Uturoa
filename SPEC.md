@@ -47,7 +47,11 @@ frappe), `utu/commit` (certificat du bloc précédent).
 ## 4. Consensus
 
 - BFT de type Tendermint, finalité immédiate, `n = 3f + 1`.
-- Bloc visé : 2 secondes, soit environ 15 768 000 blocs par an.
+- Bloc visé : 12 secondes, soit 2 628 000 blocs par an (365 jours).
+- **Toute l'émission est comptée en blocs.** Changer la durée d'un bloc exige
+  une version de protocole qui ajuste en même temps la durée de la frappe, la
+  frappe par bloc et le diviseur de forge, sinon le calendrier d'émission
+  change.
 - Chaque bloc porte le certificat du bloc précédent (`last_commit`), avec
   toutes les signatures reçues. Il sert à mesurer la présence des validateurs.
   Son empreinte `H("utu/commit" ‖ certificat)` est dans l'en-tête
@@ -64,8 +68,8 @@ frappe), `utu/commit` (certificat du bloc précédent).
 
 ### 4.2 Bascule
 
-- À une hauteur fixée dans la genèse (fin du 6e mois, environ 7 884 000
-  blocs).
+- À la fin de la phase de frappe : hauteur 1 314 000 (6 mois de blocs de
+  12 s).
 - La bascule ne change que la règle de sélection des validateurs. Le moteur de
   consensus reste le même.
 - Si la répartition du stake est jugée trop concentrée à l'approche de la
@@ -88,7 +92,8 @@ frappe), `utu/commit` (certificat du bloc précédent).
 
 ## 5. Phase 1 : la frappe
 
-- Algorithme : RandomX.
+- Algorithme : RandomX. Les validateurs vérifient en mode léger (256 Mo) ;
+  coût mesuré de l'ordre de 25 ms par part sur un serveur modeste.
 - Les mineurs ne produisent pas de blocs. Ils soumettent des **parts de
   frappe** (`MintShare`), incluses dans les blocs à côté des transactions.
 - Une part **n'est pas une transaction** : elle n'a ni émetteur, ni nonce, ni
@@ -96,25 +101,38 @@ frappe), `utu/commit` (certificat du bloc précédent).
   fait partie des données hachées : copier une part en changeant le
   bénéficiaire la rend invalide.
 - Une part contient : l'identifiant de chaîne, l'adresse du bénéficiaire, la
-  hauteur et l'empreinte d'un bloc récent (fenêtre de validité **à
-  trancher**, de l'ordre de 64 blocs) et un nonce. Elle n'est valide que si
-  l'empreinte RandomX de `"utu/mint" ‖ part` est sous la cible de difficulté.
-- Identifiant d'une part : `H("utu/mint" ‖ part)`.
-- Une part ne peut être acceptée qu'une seule fois.
-- Quantité frappée : 150 000 000 pièces sur la phase, soit 19 025 875 190
-  unités par bloc (quantité entière, constante). Le reste de la division reste
-  dans le réservoir.
-- Partage : toutes les 300 blocs (10 minutes), la récompense accumulée est
-  répartie entre les parts valides de la période, au prorata.
-- Nombre de parts par bloc plafonné ; difficulté ajustée pour viser un nombre
-  cible de parts par période. Valeurs **à trancher** lors du lot 3.
-- Les parts sont refusées après la bascule.
+  hauteur et l'empreinte d'un bloc d'ancrage, et un nonce.
+- **Validité** d'une part incluse dans le bloc `h` :
+  - même identifiant de chaîne ;
+  - bloc d'ancrage de hauteur `a` avec `h − 64 ≤ a < h`, et empreinte égale à
+    celle de ce bloc ;
+  - jamais acceptée auparavant (identifiant `H("utu/mint" ‖ part)`) ;
+  - empreinte RandomX de `"utu/mint" ‖ part`, avec la clé du bloc `h`, sous la
+    cible : ses 8 premiers octets, en grand-boutiste, valent au plus
+    `u64::MAX / difficulté`.
+- **Clé RandomX** du bloc `h` : l'empreinte du bloc de hauteur
+  `⌊(h − 64) / 2048⌋ × 2048` (0 si négatif). Elle change toutes les
+  2 048 blocs (environ 6 h 50), avec 64 blocs de préavis.
+- Au plus 100 parts par bloc (chacune coûte une vérification RandomX).
+- **Quantité frappée** : 150 000 000 pièces sur la phase, soit
+  114 155 251 141 unités par bloc (quantité entière, constante), versées au
+  pot de frappe.
+- **Partage** : tous les 50 blocs (10 minutes), le pot est réparti entre les
+  bénéficiaires des parts de la période, au prorata du nombre de parts. Le
+  reste de la division reste au pot. Sans aucune part, le pot est reporté.
+  Un paiement de frappe peut créer un compte sous la réserve minimale : il
+  rémunère un travail, pas un envoi.
+- **Difficulté** : à chaque fin de période, `difficulté × parts reçues /
+  2 000`, bornée entre le quart et le quadruple de la précédente, jamais
+  sous 1. Difficulté initiale : 1 000.
+- **Fin de la phase** (bloc 1 314 000) : après le dernier partage, ce qui
+  reste au pot retourne au réservoir. Les parts sont ensuite refusées.
 
 ## 6. Phase 2 : melt & forge
 
 ```
 réservoir = PLAFOND − offre en circulation
-forge     = réservoir >> 29          (à chaque bloc, division entière)
+forge     = réservoir / 89 478 485   (à chaque bloc, division entière)
 melt      = 80 % des frais + unités confisquées → retour au réservoir
 proposeur = 20 % des frais
 ```
@@ -125,6 +143,8 @@ proposeur = 20 % des frais
   reste dans le réservoir.
 - Le plafond ne peut jamais être dépassé : la forge est toujours inférieure au
   réservoir.
+
+Le diviseur vaut 2^29 / 6 : environ 9,5 pièces par bloc à la bascule.
 
 Ordres de grandeur (150 M en circulation à la bascule, sans usage) :
 
@@ -187,8 +207,6 @@ aucune clé d'administration.
 ## 10. Questions encore ouvertes
 
 1. Nom définitif et nom de l'unité.
-2. Paramètres de la frappe : fenêtre de validité d'une part, cible de parts,
-   plafond par bloc.
-3. Formule des frais dynamiques.
-4. Commission maximale des validateurs.
-5. Nombre et identité des validateurs d'amorçage.
+2. Commission maximale des validateurs.
+3. Nombre et identité des validateurs d'amorçage.
+4. Réglage de la difficulté initiale et de la cible de parts après un testnet.

@@ -1,11 +1,12 @@
 //! État, application des transactions et des blocs.
 
 use crate::fees::{next_base_fee, split_fee};
+use crate::mint::{INITIAL_MINT_DIFFICULTY, MINT_PERIOD, MintState, PowHasher, ShareError};
 use std::collections::BTreeMap;
 use thiserror::Error;
 use uturoa_core::{
     Account, Address, Amount, Authorization, CoreError, Hash, MAX_BATCH_PAYMENTS, MAX_SUPPLY,
-    MIN_BASE_FEE_PER_BYTE, MIN_RESERVE, MINT_PER_BLOCK, MINT_PHASE_BLOCKS, Params,
+    MIN_BASE_FEE_PER_BYTE, MIN_RESERVE, MINT_PER_BLOCK, MINT_PHASE_BLOCKS, MintShare, Params,
     SignedTransaction, TxBody, encode, forge_amount,
 };
 use uturoa_crypto::{Domain, hash_tagged, merkle_root};
@@ -42,8 +43,22 @@ pub enum BlockError {
     BadHeight { expected: u64, got: u64 },
     #[error("transaction {index} invalide : {error}")]
     InvalidTx { index: usize, error: TxError },
+    #[error("part de frappe {index} invalide : {error}")]
+    InvalidShare { index: usize, error: ShareError },
     #[error("invariant de l'offre violé")]
     Invariant,
+}
+
+/// Contenu d'un bloc, tel que l'état l'applique.
+pub struct BlockInput<'a> {
+    pub height: u64,
+    /// Empreinte du bloc `height - 1` (le bloc de genèse pour le bloc 1).
+    pub parent_hash: Hash,
+    pub txs: &'a [SignedTransaction],
+    pub shares: &'a [MintShare],
+    pub proposer: &'a Address,
+    /// Taille encodée du bloc, pour le frais de base suivant.
+    pub block_bytes: u64,
 }
 
 impl From<CoreError> for TxError {
@@ -65,8 +80,10 @@ pub struct State {
     accounts: BTreeMap<Address, Account>,
     /// Offre en circulation : émise moins fondue. Jamais plus que `MAX_SUPPLY`.
     supply: Amount,
-    /// Unités émises, en attente de partage (lots 3 et 4).
+    /// Unités forgées, en attente de partage entre validateurs (lot 4).
     pending_rewards: Amount,
+    /// Frappe de la phase 1.
+    mint: MintState,
     /// Frais de base par octet pour le prochain bloc.
     base_fee_per_byte: Amount,
 }
@@ -86,6 +103,15 @@ pub fn block_issuance(height: u64, supply: Amount) -> Amount {
 impl State {
     /// État de genèse : aucun compte, aucune unité.
     pub fn genesis(chain_id: impl Into<String>, params: Params) -> Self {
+        Self::genesis_with_mint_difficulty(chain_id, params, INITIAL_MINT_DIFFICULTY)
+    }
+
+    /// Genèse avec une difficulté de frappe initiale choisie (réseaux d'essai).
+    pub fn genesis_with_mint_difficulty(
+        chain_id: impl Into<String>,
+        params: Params,
+        difficulty: u64,
+    ) -> Self {
         Self {
             chain_id: chain_id.into(),
             protocol_version: 1,
@@ -94,6 +120,7 @@ impl State {
             accounts: BTreeMap::new(),
             supply: 0,
             pending_rewards: 0,
+            mint: MintState::new(difficulty),
             base_fee_per_byte: MIN_BASE_FEE_PER_BYTE,
         }
     }
@@ -114,6 +141,10 @@ impl State {
         self.pending_rewards
     }
 
+    pub fn mint(&self) -> &MintState {
+        &self.mint
+    }
+
     pub fn base_fee_per_byte(&self) -> Amount {
         self.base_fee_per_byte
     }
@@ -130,7 +161,10 @@ impl State {
             .accounts
             .values()
             .try_fold(0u64, |acc, a| acc.checked_add(a.balance));
-        balances.and_then(|b| b.checked_add(self.pending_rewards)) == Some(self.supply)
+        balances
+            .and_then(|b| b.checked_add(self.pending_rewards))
+            .and_then(|b| b.checked_add(self.mint.pot))
+            == Some(self.supply)
             && self.supply <= MAX_SUPPLY
     }
 
@@ -149,6 +183,7 @@ impl State {
             self.supply,
             self.pending_rewards,
             self.base_fee_per_byte,
+            &self.mint,
             merkle_root(&leaves),
         );
         hash_tagged(Domain::State, &encode(&globals))
@@ -157,11 +192,10 @@ impl State {
     /// Applique un bloc de façon atomique : en cas d'erreur, l'état ne change pas.
     pub fn apply_block(
         &mut self,
-        height: u64,
-        txs: &[SignedTransaction],
-        proposer: &Address,
-        block_bytes: u64,
+        block: &BlockInput,
+        pow: &dyn PowHasher,
     ) -> Result<(), BlockError> {
+        let height = block.height;
         let expected = self.height.saturating_add(1);
         if height != expected {
             return Err(BlockError::BadHeight {
@@ -170,22 +204,49 @@ impl State {
             });
         }
         let mut next = self.clone();
-        for (index, stx) in txs.iter().enumerate() {
-            next.apply_tx(stx, proposer)
+        next.mint.record_parent(height, block.parent_hash);
+        for (index, stx) in block.txs.iter().enumerate() {
+            next.apply_tx(stx, block.proposer)
                 .map_err(|error| BlockError::InvalidTx { index, error })?;
         }
+        next.apply_shares(height, block.shares, pow)?;
+
+        // Émission : frappe (au pot) pendant la phase 1, forge ensuite.
         let issued = block_issuance(height, next.supply);
         next.supply = next
             .supply
             .checked_add(issued)
             .ok_or(BlockError::Invariant)?;
-        next.pending_rewards = next
-            .pending_rewards
-            .checked_add(issued)
-            .ok_or(BlockError::Invariant)?;
+        if height <= MINT_PHASE_BLOCKS {
+            next.mint.pot = next
+                .mint
+                .pot
+                .checked_add(issued)
+                .ok_or(BlockError::Invariant)?;
+            if height.checked_rem(MINT_PERIOD) == Some(0) {
+                for (address, amount) in next.mint.close_period() {
+                    let a = next.accounts.entry(address).or_default();
+                    a.balance = a.balance.checked_add(amount).ok_or(BlockError::Invariant)?;
+                }
+            }
+            if height == MINT_PHASE_BLOCKS {
+                // Ce qui n'a pas été partagé retourne au réservoir.
+                next.supply = next
+                    .supply
+                    .checked_sub(next.mint.pot)
+                    .ok_or(BlockError::Invariant)?;
+                next.mint.pot = 0;
+            }
+        } else {
+            next.pending_rewards = next
+                .pending_rewards
+                .checked_add(issued)
+                .ok_or(BlockError::Invariant)?;
+        }
+
         next.base_fee_per_byte = next_base_fee(
             next.base_fee_per_byte,
-            block_bytes,
+            block.block_bytes,
             next.params.max_block_bytes,
         );
         next.height = height;
@@ -193,6 +254,30 @@ impl State {
             return Err(BlockError::Invariant);
         }
         *self = next;
+        Ok(())
+    }
+
+    fn apply_shares(
+        &mut self,
+        height: u64,
+        shares: &[MintShare],
+        pow: &dyn PowHasher,
+    ) -> Result<(), BlockError> {
+        if shares.is_empty() {
+            return Ok(());
+        }
+        let refuse = |error| Err(BlockError::InvalidShare { index: 0, error });
+        if height > MINT_PHASE_BLOCKS {
+            return refuse(ShareError::PhaseOver);
+        }
+        if u64::try_from(shares.len()).unwrap_or(u64::MAX) > self.params.max_block_shares {
+            return refuse(ShareError::TooMany);
+        }
+        for (index, share) in shares.iter().enumerate() {
+            self.mint
+                .accept(&self.chain_id, height, share, pow)
+                .map_err(|error| BlockError::InvalidShare { index, error })?;
+        }
         Ok(())
     }
 

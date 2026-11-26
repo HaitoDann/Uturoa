@@ -13,4 +13,5 @@ workspace = true
 [dependencies]
 uturoa-crypto.workspace = true
 uturoa-core.workspace = true
+borsh.workspace = true
 thiserror.workspace = true
