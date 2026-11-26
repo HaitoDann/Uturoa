@@ -11,7 +11,7 @@ use uturoa_keystore::keyfile::{DEFAULT_KDF, KeyFile, password};
 use uturoa_node::chain::Chain;
 use uturoa_node::genesis_file::{GenesisFile, validator_entry};
 use uturoa_node::service::{NodeConfig, launch};
-use uturoa_pow::RandomXHasher;
+use uturoa_pow::{CachedPow, RandomXHasher};
 
 #[derive(Parser)]
 #[command(name = "uturoa-node", version, about = "Nœud Uturoa")]
@@ -59,6 +59,37 @@ enum Command {
         /// au-delà de la phase d'amorçage.
         #[arg(long)]
         trusted_block: Option<String>,
+        /// Adresse de l'API HTTP et de l'explorateur, par exemple 127.0.0.1:8545.
+        #[arg(long)]
+        api: Option<std::net::SocketAddr>,
+    },
+    /// Frappe des pièces en continu pour une adresse, via l'API d'un nœud.
+    Mine {
+        #[arg(long, default_value = "127.0.0.1:8545")]
+        api: std::net::SocketAddr,
+        /// Adresse qui reçoit la frappe (utu1…).
+        #[arg(long)]
+        address: String,
+    },
+    /// Envoie des pièces, via l'API d'un nœud.
+    Send {
+        #[arg(long, default_value = "127.0.0.1:8545")]
+        api: std::net::SocketAddr,
+        /// Fichier de clé de l'émetteur (mot de passe : UTUROA_KEY_PASSWORD).
+        #[arg(long)]
+        key: PathBuf,
+        #[arg(long)]
+        to: String,
+        /// Montant en pièces, par exemple 1,5.
+        #[arg(long)]
+        amount: String,
+        #[arg(long)]
+        memo: Option<String>,
+    },
+    /// Crée une clé chiffrée (portefeuille de test) et affiche son adresse.
+    NewKey {
+        #[arg(long)]
+        out: PathBuf,
     },
     /// Affiche l'état d'une base locale.
     Info {
@@ -148,6 +179,7 @@ fn main() -> Result<()> {
             listen,
             peer,
             trusted_block,
+            api,
         } => {
             tracing_subscriber::fmt()
                 .with_env_filter(
@@ -174,8 +206,9 @@ fn main() -> Result<()> {
                         listen: listen.parse()?,
                         peers: peer.iter().map(|p| p.parse()).collect::<Result<_, _>>()?,
                         trusted_block,
+                        api,
                     },
-                    Box::new(RandomXHasher::new()),
+                    Box::new(CachedPow::new(RandomXHasher::new(), 100_000)),
                 )?;
                 println!("nœud démarré : {}", node.peer_id);
                 tokio::signal::ctrl_c().await?;
@@ -185,6 +218,37 @@ fn main() -> Result<()> {
                 }
                 anyhow::Ok(())
             })?;
+        }
+        Command::Mine { api, address } => {
+            let beneficiary = address
+                .parse()
+                .map_err(|e| anyhow::anyhow!("adresse invalide : {e}"))?;
+            println!("frappe pour {address} via {api} (Ctrl+C pour arrêter)");
+            uturoa_node::client::mine(api, beneficiary, &RandomXHasher::new())?;
+        }
+        Command::Send {
+            api,
+            key,
+            to,
+            amount,
+            memo,
+        } => {
+            let kp = KeyFile::load(&key)?.decrypt(&password(None)?)?;
+            let to = to
+                .parse()
+                .map_err(|e| anyhow::anyhow!("adresse invalide : {e}"))?;
+            let units = uturoa_node::client::parse_coins(&amount)?;
+            let id = uturoa_node::client::send(api, &kp, to, units, memo)?;
+            println!("transaction soumise : {id}");
+        }
+        Command::NewKey { out } => {
+            let kp = KeyPair::generate();
+            KeyFile::encrypt(&kp, &password(None)?, DEFAULT_KDF)?.save(&out)?;
+            println!(
+                "clé créée : {}\nadresse   : {}",
+                out.display(),
+                uturoa_core::Address::from_public_key(&kp.public_key())
+            );
         }
         Command::Info { genesis, data_dir } => {
             let genesis = GenesisFile::load(&genesis)?;

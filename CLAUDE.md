@@ -45,7 +45,7 @@ Monnaie minimaliste en Rust : une seule fonction, envoyer de la valeur.
 | `uturoa-state` | Machine d'état : comptes, réserve, envois, multisignatures, frais dynamiques, melt, frappe (parts, partage, difficulté ; RandomX abstrait par `PowHasher`), forge (partagée par `staking`) |
 | `uturoa-state::staking` | Validateurs, délégation, présence (certificat du bloc précédent), mise à l'écart, restitution, double signature, récompenses par époque, signal de mise à jour, bascule |
 | `uturoa-pow` | RandomX (crate `randomx-rs`, C++ : il faut CMake et un compilateur C++) : vérification en mode léger et minage |
-| `uturoa-node` | Nœud : genèse JSON, stockage redb (blocs, certificats, instantanés, garde et verrou de consensus), chaîne, mempool, réseau libp2p **ouvert** (gossip, rattrapage, instantané), boucle de consensus, soumission automatique des preuves d'équivoque ; commandes `devnet`, `run`, `info` |
+| `uturoa-node` | Nœud : genèse JSON, stockage redb (blocs, certificats, instantanés, garde et verrou de consensus), chaîne, mempool, réseau libp2p **ouvert** (gossip, rattrapage, instantané), boucle de consensus, soumission automatique des preuves d'équivoque, API HTTP et explorateur (`--api`), client de test ; commandes `devnet`, `run`, `info`, `new-key`, `mine`, `send` |
 | `uturoa-keystore` | Fichiers de clés chiffrés ; mot de passe par `UTUROA_KEY_PASSWORD` ou fichier |
 
 ## 4. Commandes
@@ -62,6 +62,10 @@ export UTUROA_KEY_PASSWORD=pw
 uturoa-node devnet --dir net --block-interval-ms 1000   # affiche les 4 commandes run
 uturoa-node run --genesis net/genesis.json --key net/validator-1.json --data-dir net/d1 --listen /ip4/127.0.0.1/tcp/30333 --peer …
 uturoa-node info --genesis net/genesis.json --data-dir net/d1
+# avec --api 127.0.0.1:8545 sur un nœud : explorateur sur http://127.0.0.1:8545/
+uturoa-node new-key --out alice.json
+uturoa-node mine --api 127.0.0.1:8545 --address utu1…
+uturoa-node send --api 127.0.0.1:8545 --key alice.json --to utu1… --amount 12,5
 ```
 
 ## 5. Conventions
@@ -94,6 +98,11 @@ uturoa-node info --genesis net/genesis.json --data-dir net/d1
   qu'on connaît déjà, ou si l'opérateur fournit l'empreinte du bloc
   (`--trusted-block`). Après la bascule, un nouveau nœud a donc besoin d'une
   empreinte de confiance.
+- Une part est vérifiée par RandomX à son arrivée ; `CachedPow` mémoïse les
+  empreintes, et `Chain` garde l'état résultant du dernier bloc vérifié (clé :
+  empreinte du bloc **entier**, jamais de l'en-tête seul).
+- `mine`, `send` et `new-key` sont des outils de test en attendant les
+  portefeuilles (lot 6).
 - Si RandomX échoue localement, `RandomXHasher` renvoie une empreinte qui ne
   satisfait aucune cible : le nœud refuse la part (risque de blocage, jamais
   d'acceptation à tort).
@@ -109,6 +118,6 @@ uturoa-node info --genesis net/genesis.json --data-dir net/d1
 | 4 | Preuve d'enjeu : délégation, sélection, plafond de vote, sanctions, bascule | fait |
 | 5a | Nœud : genèse, stockage, chaîne, `devnet` | fait |
 | 5b | Nœud : réseau libp2p, boucle de consensus, mempool, preuves d'équivoque soumises d'office | fait |
-| 5c | Nœud : API, synchronisation par instantané, explorateur | à faire |
+| 5c | Nœud : API, synchronisation par instantané, explorateur, outils de test (`mine`, `send`) | fait |
 | 6 | Portefeuilles (bureau avec mineur intégré, mobile) | à faire |
 | 7 | Testnet public, fuzzing, essais de panne, répétition complète frappe → bascule | à faire |

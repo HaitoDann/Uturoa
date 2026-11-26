@@ -45,6 +45,15 @@ impl std::fmt::Display for AddError {
     }
 }
 
+/// Clé RandomX du bloc `height` : l'état ne connaît l'empreinte du bloc
+/// `height - 1` qu'en appliquant le bloc `height`, d'où `parent_hash`.
+pub fn seed_for(state: &State, height: u64, parent_hash: &Hash) -> Option<Hash> {
+    if uturoa_state::mint::seed_height(height) == height.saturating_sub(1) {
+        return Some(*parent_hash);
+    }
+    state.mint().seed_for(height)
+}
+
 impl Mempool {
     pub fn len(&self) -> usize {
         self.count
@@ -110,9 +119,7 @@ impl Mempool {
             .mint()
             .precheck(&state.chain_id, height, parent_hash, &share)
             .map_err(|e| AddError::Invalid(e.to_string()))?;
-        let seed = state
-            .mint()
-            .seed_for(height)
+        let seed = seed_for(state, height, parent_hash)
             .ok_or_else(|| AddError::Invalid("clé RandomX inconnue".into()))?;
         if !meets_target(
             &pow.hash(&seed, &share.pow_input()),

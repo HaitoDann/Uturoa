@@ -86,6 +86,7 @@ async fn four_validators_produce_blocks_mint_and_transfer() {
                         .map(|(_, a)| a.parse().unwrap())
                         .collect(),
                     trusted_block: None,
+                    api: (i == 0).then(|| format!("127.0.0.1:{}", base + 100).parse().unwrap()),
                 },
                 Box::new(FakePow),
             )

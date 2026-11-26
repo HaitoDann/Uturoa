@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explorateur Uturoa</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#17202b;--muted:#5a6675;--line:#dde2e8;--accent:#1f5f7a;--ok:#2f7a4a;--warn:#a36a00}
+@media (prefers-color-scheme:dark){:root{--bg:#0f141a;--card:#161d25;--fg:#e6ebf0;--muted:#9aa7b5;--line:#2a3541;--accent:#6fb4d1;--ok:#6cc58f;--warn:#e0b04f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1000px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:20px}
+h1{margin:0;font-size:1.6rem}h2{margin:0 0 10px;font-size:1.1rem}
+.sub{color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile,.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
+.tile b{display:block;font-size:1.25rem;font-variant-numeric:tabular-nums}
+.tile span{color:var(--muted);font-size:.85rem}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:.9rem}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--muted);font-weight:600}
+code{font-family:ui-monospace,Menlo,monospace;font-size:.85em}
+form{display:flex;gap:8px;flex-wrap:wrap}
+input{flex:1;min-width:0;padding:8px;border:1px solid var(--line);border-radius:4px;background:var(--card);color:var(--fg)}
+button{padding:8px 14px;border:0;border-radius:4px;background:var(--accent);color:var(--bg);font-weight:600;cursor:pointer}
+.ok{color:var(--ok)}.warn{color:var(--warn)}
+pre{white-space:pre-wrap;word-break:break-all;margin:10px 0 0}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Explorateur Uturoa</h1>
+    <div class="sub" id="chain">Connexion au nœud…</div>
+  </header>
+
+  <section class="grid" id="tiles"></section>
+
+  <section class="card">
+    <h2>Derniers blocs</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Hauteur</th><th>Heure</th><th>Round</th><th>Signatures</th><th>Transactions</th><th>Parts</th><th>Empreinte</th></tr></thead>
+      <tbody id="blocks"></tbody>
+    </table></div>
+  </section>
+
+  <section class="card">
+    <h2>Validateurs actifs</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Nom</th><th>Statut</th><th>Présence (époque)</th><th>Stake propre</th><th>Délégué</th><th>Commission</th></tr></thead>
+      <tbody id="validators"></tbody>
+    </table></div>
+  </section>
+
+  <section class="card">
+    <h2>Rechercher un compte</h2>
+    <form id="search"><input id="addr" placeholder="utu1…" aria-label="Adresse"><button>Afficher</button></form>
+    <pre id="account"></pre>
+  </section>
+</main>
+<script>
+const COIN = 1e9;
+const coins = (u) => (Number(BigInt(u)) / COIN).toLocaleString('fr-FR', {maximumFractionDigits: 4});
+const get = (p) => fetch(p).then(r => r.json());
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function refresh() {
+  try {
+    const s = await get('/status');
+    document.getElementById('chain').textContent = `Chaîne ${s.chain_id} · protocole ${s.protocol_version} · ${s.peers} pair(s)`;
+    const tiles = [
+      ['Hauteur', s.height.toLocaleString('fr-FR')],
+      ['En circulation', coins(s.supply) + ' pièces'],
+      ['Validateurs', s.validators],
+      ['Difficulté de frappe', s.mint.difficulty.toLocaleString('fr-FR')],
+      ['Parts (période)', s.mint.period_shares],
+      ['Frais de base', s.base_fee_per_byte + ' u/octet'],
+      ['En attente', s.mempool + ' tx'],
+    ];
+    document.getElementById('tiles').innerHTML = tiles.map(([k, v]) => `<div class="tile"><b>${esc(v)}</b><span>${k}</span></div>`).join('');
+    const rows = [];
+    for (let h = s.height; h > Math.max(0, s.height - 10); h--) {
+      const b = await get('/blocks/' + h);
+      if (b.error) break;
+      rows.push(`<tr><td>${b.height}</td><td>${new Date(b.timestamp_ms).toLocaleTimeString('fr-FR')}</td><td>${b.round ?? '–'}</td><td>${b.signatures ?? '–'}</td><td>${b.transactions.length}</td><td>${b.mint_shares}</td><td><code>${b.hash.slice(0, 16)}…</code></td></tr>`);
+    }
+    document.getElementById('blocks').innerHTML = rows.join('') || '<tr><td colspan="7">Aucun bloc pour l’instant.</td></tr>';
+    const v = await get('/validators');
+    document.getElementById('validators').innerHTML = v.active.map(x => {
+      const pct = x.epoch_expected ? (100 * x.epoch_signed / x.epoch_expected).toFixed(1) + ' %' : '–';
+      const cls = x.status === 'actif' ? 'ok' : 'warn';
+      return `<tr><td>${esc(x.name)}${x.bootstrap ? ' <span class="sub">(amorçage)</span>' : ''}</td><td class="${cls}">${esc(x.status)}</td><td>${pct}</td><td>${coins(x.self_stake)}</td><td>${coins(x.delegated)}</td><td>${(x.commission_bps / 100).toFixed(1)} % (max ${(x.max_commission_bps / 100).toFixed(1)} %)</td></tr>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('chain').textContent = 'Nœud injoignable : ' + e;
+  }
+}
+
+document.getElementById('search').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const a = await get('/accounts/' + encodeURIComponent(document.getElementById('addr').value.trim()));
+  document.getElementById('account').textContent = a.error ? a.error :
+    `Solde : ${coins(a.balance)} pièces\nNonce : ${a.nonce}\nClé connue : ${a.key_known ? 'oui' : 'non'}` +
+    (a.multisig ? `\nMultisignature : ${a.multisig.threshold} sur ${a.multisig.signers.length}` : '');
+});
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

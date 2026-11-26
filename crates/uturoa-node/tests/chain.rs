@@ -177,3 +177,46 @@ fn tampered_blocks_are_rejected() {
     weak.signatures.truncate(2);
     assert!(chain.commit_block(good, weak).is_err());
 }
+
+#[test]
+fn snapshot_is_installed_by_a_fresh_node_and_tampering_is_refused() {
+    let (genesis, kps) = setup(4);
+    let miner = Address::from_bytes([7; 20]);
+    let src = tempfile::tempdir().unwrap();
+    let mut a = Chain::open(src.path(), &genesis, Box::new(FakePow)).unwrap();
+    a.set_snapshot_interval(30);
+    advance(&mut a, &kps, 65, miner);
+    let (block, commit, bytes) = a.snapshot().unwrap().unwrap();
+    assert_eq!(block.header.height, 60);
+
+    // État falsifié : refusé (la racine ne correspond plus).
+    let dst = tempfile::tempdir().unwrap();
+    let mut b = Chain::open(dst.path(), &genesis, Box::new(FakePow)).unwrap();
+    let mut forged: uturoa_state::State = uturoa_core::decode(&bytes).unwrap();
+    forged.credit_for_tests(&Address::from_bytes([66; 20]), UNITS_PER_COIN);
+    let forged = uturoa_core::encode(&forged);
+    assert!(
+        b.install_snapshot(block.clone(), commit.clone(), &forged, None)
+            .is_err()
+    );
+    // Certificat sans quorum : refusé.
+    let mut weak = commit.clone();
+    weak.signatures.truncate(2);
+    assert!(
+        b.install_snapshot(block.clone(), weak, &bytes, None)
+            .is_err()
+    );
+    // Le vrai instantané : installé, puis la chaîne repart de là.
+    b.install_snapshot(block, commit, &bytes, None).unwrap();
+    assert_eq!(b.height(), 60);
+    for h in 61..=65 {
+        let blk = a.store().block(h).unwrap().unwrap();
+        let c = a.store().commit(h).unwrap().unwrap();
+        b.commit_block(blk, c).unwrap();
+    }
+    assert_eq!(b.state().state_root(), a.state().state_root());
+    // Et après redémarrage.
+    drop(b);
+    let b = Chain::open(dst.path(), &genesis, Box::new(FakePow)).unwrap();
+    assert_eq!(b.height(), 65);
+}

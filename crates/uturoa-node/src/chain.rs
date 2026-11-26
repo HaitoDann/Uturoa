@@ -21,6 +21,11 @@ pub fn validators_hash(keys: &[PublicKey]) -> Hash {
     hash_tagged(Domain::Validators, &encode(&keys.to_vec()))
 }
 
+/// Empreinte du bloc entier (en-tête et contenu).
+fn full_hash(block: &Block) -> Hash {
+    hash_tagged(Domain::Block, &encode(block))
+}
+
 pub struct Chain {
     state: State,
     store: Store,
@@ -29,6 +34,10 @@ pub struct Chain {
     last_header: Option<BlockHeader>,
     pow: Box<dyn PowHasher + Send>,
     snapshot_interval: u64,
+    /// Dernier bloc vérifié (empreinte du bloc entier) et l'état qui en
+    /// résulte : un bloc est vérifié à sa proposition puis validé, sans être
+    /// réappliqué.
+    verified: std::sync::Mutex<Option<(Hash, State)>>,
 }
 
 impl Chain {
@@ -50,6 +59,7 @@ impl Chain {
             last_header: None,
             pow,
             snapshot_interval: SNAPSHOT_INTERVAL,
+            verified: std::sync::Mutex::new(None),
         };
         if chain.state.height > 0 {
             chain.last_header = chain.store.block(chain.state.height)?.map(|b| b.header);
@@ -161,6 +171,9 @@ impl Chain {
         let next = self.execute(&block)?;
         block.header.state_root = next.state_root();
         block.header.validators_hash = validators_hash(&next.next_validators());
+        if let Ok(mut v) = self.verified.lock() {
+            *v = Some((full_hash(&block), next));
+        }
         Ok(block)
     }
 
@@ -189,6 +202,30 @@ impl Chain {
 
     /// Vérifie entièrement un bloc candidat et renvoie l'état qui en résulte.
     pub fn verify(&self, block: &Block, now_ms: u64) -> Result<State> {
+        // Clé du cache : le bloc **complet**, pas seulement l'en-tête, pour
+        // qu'un contenu modifié sous le même en-tête soit revérifié.
+        let hash = full_hash(block);
+        let cached = self.verified.lock().ok().and_then(|v| {
+            v.as_ref()
+                .filter(|(h, s)| *h == hash && s.height == block.header.height)
+                .map(|(_, s)| s.clone())
+        });
+        if let Some(state) = cached {
+            // Seul l'horodatage dépend de l'heure de la vérification.
+            if let Some(parent) = &self.last_header {
+                check_header_link(parent, &block.header, now_ms)
+                    .map_err(|e| anyhow!("chaînage de l'en-tête : {e:?}"))?;
+            }
+            return Ok(state);
+        }
+        let state = self.verify_uncached(block, now_ms)?;
+        if let Ok(mut v) = self.verified.lock() {
+            *v = Some((hash, state.clone()));
+        }
+        Ok(state)
+    }
+
+    fn verify_uncached(&self, block: &Block, now_ms: u64) -> Result<State> {
         let h = &block.header;
         if h.chain_id != self.state.chain_id {
             bail!("autre chaîne");

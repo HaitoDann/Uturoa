@@ -25,6 +25,20 @@ Pré-alpha. Le dépôt contient pour l'instant :
 
 Rien n'est déployé. Aucune pièce n'existe.
 
+## Essayer en local
+
+```bash
+cargo build --release -p uturoa-node
+export UTUROA_KEY_PASSWORD=motdepasse
+./target/release/uturoa-node devnet --dir net --block-interval-ms 1000
+# lancer les 4 commandes « run » affichées, chacune dans un terminal,
+# en ajoutant --api 127.0.0.1:8545 à la première
+./target/release/uturoa-node new-key --out alice.json
+./target/release/uturoa-node mine --api 127.0.0.1:8545 --address utu1…
+```
+
+L'explorateur est sur http://127.0.0.1:8545/.
+
 ## Compiler et tester
 
 Il faut Rust, CMake et un compilateur C++ (pour RandomX).

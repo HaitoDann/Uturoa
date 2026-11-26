@@ -22,6 +22,8 @@ pub struct NodeConfig {
     pub listen: Multiaddr,
     pub peers: Vec<Multiaddr>,
     pub trusted_block: Option<Hash>,
+    /// Adresse d'écoute de l'API HTTP, par exemple `127.0.0.1:8545`.
+    pub api: Option<std::net::SocketAddr>,
 }
 
 pub struct RunningNode {
@@ -66,11 +68,31 @@ pub fn launch(config: NodeConfig, pow: Box<dyn PowHasher + Send>) -> Result<Runn
         in_tx,
         stop_rx.clone(),
     ));
-    let consensus = tokio::spawn(node::run(shared.clone(), config.key, in_rx, stop_rx));
+    let consensus = tokio::spawn(node::run(
+        shared.clone(),
+        config.key,
+        in_rx,
+        stop_rx.clone(),
+    ));
+    let mut tasks = vec![net, consensus];
+    if let Some(addr) = config.api {
+        let app = crate::api::router(shared.clone());
+        let mut stop = stop_rx;
+        tasks.push(tokio::spawn(async move {
+            let listener = tokio::net::TcpListener::bind(addr).await?;
+            tracing::info!(%addr, "API démarrée");
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async move {
+                    let _ = stop.changed().await;
+                })
+                .await?;
+            anyhow::Ok(())
+        }));
+    }
     Ok(RunningNode {
         shared,
         peer_id,
         shutdown: stop_tx,
-        tasks: vec![net, consensus],
+        tasks,
     })
 }

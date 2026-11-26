@@ -82,6 +82,44 @@ impl PowHasher for RandomXHasher {
     }
 }
 
+/// Mémoïse les empreintes d'un autre calcul de preuve de travail : une part
+/// vérifiée à son arrivée ne coûte plus rien quand elle repasse dans un bloc.
+pub struct CachedPow<P> {
+    inner: P,
+    cache: Mutex<std::collections::HashMap<[u8; 32], Hash>>,
+    capacity: usize,
+}
+
+impl<P: PowHasher> CachedPow<P> {
+    pub fn new(inner: P, capacity: usize) -> Self {
+        Self {
+            inner,
+            cache: Mutex::new(std::collections::HashMap::new()),
+            capacity,
+        }
+    }
+}
+
+impl<P: PowHasher> PowHasher for CachedPow<P> {
+    fn hash(&self, seed: &Hash, input: &[u8]) -> Hash {
+        let mut key_input = Vec::with_capacity(input.len().saturating_add(32));
+        key_input.extend_from_slice(seed);
+        key_input.extend_from_slice(input);
+        let key = *blake3::hash(&key_input).as_bytes();
+        if let Some(h) = self.cache.lock().ok().and_then(|c| c.get(&key).copied()) {
+            return h;
+        }
+        let h = self.inner.hash(seed, input);
+        if let Ok(mut c) = self.cache.lock() {
+            if c.len() >= self.capacity {
+                c.clear();
+            }
+            c.insert(key, h);
+        }
+        h
+    }
+}
+
 /// Cherche, en au plus `max_tries` essais, un nonce qui rend la part valide
 /// pour `difficulty`, en partant du nonce de `template`.
 pub fn mine(
@@ -128,6 +166,16 @@ mod tests {
         assert_eq!(h.hash(&[1; 32], &input), a);
         // Une seconde instance donne la même empreinte.
         assert_eq!(RandomXHasher::new().hash(&[1; 32], &input), a);
+    }
+
+    #[test]
+    fn cache_returns_the_same_hashes() {
+        let cached = CachedPow::new(RandomXHasher::new(), 10);
+        let input = template().pow_input();
+        let direct = RandomXHasher::new().hash(&[3; 32], &input);
+        assert_eq!(cached.hash(&[3; 32], &input), direct);
+        assert_eq!(cached.hash(&[3; 32], &input), direct);
+        assert_ne!(cached.hash(&[4; 32], &input), direct);
     }
 
     #[test]

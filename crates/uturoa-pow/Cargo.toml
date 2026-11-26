@@ -14,6 +14,7 @@ workspace = true
 uturoa-core.workspace = true
 uturoa-state.workspace = true
 randomx-rs.workspace = true
+blake3.workspace = true
 
 [dev-dependencies]
 uturoa-crypto.workspace = true

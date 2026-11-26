@@ -3564,6 +3564,7 @@ dependencies = [
 name = "uturoa-pow"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "randomx-rs",
  "uturoa-core",
  "uturoa-crypto",
