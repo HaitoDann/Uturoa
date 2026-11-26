@@ -25,6 +25,7 @@ const EXPLORER: &str = include_str!("explorer.html");
 pub fn router(shared: SharedRef) -> Router {
     Router::new()
         .route("/", get(|| async { Html(EXPLORER) }))
+        .route("/explorer", get(|| async { Html(EXPLORER) }))
         .route("/status", get(status))
         .route("/accounts/{address}", get(account))
         .route("/blocks/{height}", get(block))

@@ -49,7 +49,7 @@ enum Command {
         #[arg(long, value_delimiter = ',')]
         names: Vec<String>,
         /// Port de l'API sur chaque machine (écoute sur 127.0.0.1), avec --hosts.
-        #[arg(long, default_value_t = 8645)]
+        #[arg(long, default_value_t = 8545)]
         api_port: u16,
     },
     /// Lance un nœud : validateur avec --key, observateur sans.
@@ -198,7 +198,7 @@ fn main() -> Result<()> {
                         .cloned()
                         .unwrap_or_else(|| format!("validateur-{n}"));
                     let unit = format!(
-                        "[Unit]\nDescription=Validateur Uturoa {name}\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nWorkingDirectory=/opt/uturoa\nEnvironmentFile=/etc/uturoa/env\nExecStart=/opt/uturoa/uturoa-node run --genesis /opt/uturoa/genesis.json --key /opt/uturoa/validator.json --data-dir /var/lib/uturoa --listen /ip4/0.0.0.0/tcp/{base_port} --api 127.0.0.1:{api_port}{peers}\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=multi-user.target\n"
+                        "[Unit]\nDescription=Validateur Uturoa {name}\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nUser=uturoa\nWorkingDirectory=/opt/uturoa\nEnvironmentFile=/etc/uturoa/env\nExecStart=/opt/uturoa/uturoa-node run --genesis /opt/uturoa/genesis.json --key /opt/uturoa/validator.json --data-dir /var/lib/uturoa --listen /ip4/0.0.0.0/tcp/{base_port} --api 127.0.0.1:{api_port}{peers}\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=multi-user.target\n"
                     );
                     let unit_path = dir.join(format!("uturoa-{n}.service"));
                     std::fs::write(&unit_path, unit)?;

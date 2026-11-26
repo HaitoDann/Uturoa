@@ -61,7 +61,7 @@ cargo test -q --release -p uturoa-state --test mint -- --ignored   # parcourt to
 # Réseau local
 export UTUROA_KEY_PASSWORD=pw
 uturoa-node devnet --dir net --block-interval-ms 1000   # affiche les 4 commandes run
-uturoa-node devnet --dir testnet --chain-id utu-testnet-1 --hosts IP1,IP2,IP3,IP4 --names A,B,C,D --base-port 30433   # services systemd
+uturoa-node devnet --dir testnet --chain-id utu-testnet-1 --hosts IP1,IP2,IP3,IP4 --names A,B,C,D --base-port 26656   # services systemd
 uturoa-node run --genesis net/genesis.json --key net/validator-1.json --data-dir net/d1 --listen /ip4/127.0.0.1/tcp/30333 --peer …
 uturoa-node info --genesis net/genesis.json --data-dir net/d1
 # avec --api 127.0.0.1:8545 sur un nœud : explorateur sur http://127.0.0.1:8545/
@@ -77,7 +77,8 @@ uturoa-wallet                       # portefeuille : ouvre le navigateur (--dir,
   Windows et macOS et les joint à une release GitHub (GitHub, Releases,
   Draft, tag `vX.Y.Z` sur `main`, Publish). La version est dans `Cargo.toml`.
 - Guides : `docs/TESTNET-LOCAL.md` (en local), `docs/DEPLOYER-PROXMOX.md`
-  (testnet sur les conteneurs de VinX, ports 30433 et 8645, service `uturoa`),
+  (remplace VinX sur les mêmes conteneurs et **les mêmes ports** : 26656
+  pour le réseau, 127.0.0.1:8545 pour l'API ; service `uturoa`),
   `docs/EXERCICES-DE-PANNE.md`.
 - **Lints stricts** : pas d'`unwrap`, pas d'`expect`, pas de `panic`, pas
   d'arithmétique non vérifiée (`checked_*` ou `saturating_*`), pas

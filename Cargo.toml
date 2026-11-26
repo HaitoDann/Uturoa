@@ -25,7 +25,6 @@ uturoa-core = { path = "crates/uturoa-core" }
 uturoa-consensus = { path = "crates/uturoa-consensus" }
 uturoa-state = { path = "crates/uturoa-state" }
 uturoa-pow = { path = "crates/uturoa-pow" }
-uturoa-node = { path = "crates/uturoa-node" }
 anyhow = "1"
 argon2 = "0.5"
 bech32 = "0.9"

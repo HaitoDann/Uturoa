@@ -15,7 +15,7 @@ minute.
 Commande `hauteurs`, à définir une fois dans le terminal de Copper :
 
 ```bash
-hauteurs() { for ip in 192.168.1.22 192.168.1.21 192.168.1.23 192.168.1.233; do printf "%-15s" $ip; ssh root@$ip "curl -s 127.0.0.1:8645/status" | grep -oE '"height":[0-9]+'; done; }
+hauteurs() { for ip in 192.168.1.22 192.168.1.21 192.168.1.23 192.168.1.233; do printf "%-15s" $ip; ssh root@$ip "curl -s 127.0.0.1:8545/status" | grep -oE '"height":[0-9]+'; done; }
 ```
 
 ## 1. Un validateur en panne : la chaîne continue
@@ -26,7 +26,7 @@ Avec 4 validateurs, il faut plus des deux tiers des votes : 3 suffisent.
 hauteurs                                              # tous égaux
 ssh root@192.168.1.233 "systemctl stop uturoa"; date
 # attendre 2 minutes, mesurer deux fois : la hauteur avance
-curl -s 127.0.0.1:8645/status | grep -oE '"height":[0-9]+'
+curl -s 127.0.0.1:8545/status | grep -oE '"height":[0-9]+'
 ssh root@192.168.1.233 "systemctl start uturoa"; sleep 60
 hauteurs                                              # Pearl a rattrapé
 ssh root@192.168.1.233 "journalctl -u uturoa --since '-10min' --no-pager | grep -iE 'error|panic' | tail"
@@ -44,7 +44,7 @@ Avec 2 validateurs sur 4, il n'y a plus de majorité : la chaîne doit
 ```bash
 ssh root@192.168.1.233 "systemctl stop uturoa"; ssh root@192.168.1.23 "systemctl stop uturoa"; date
 # attendre 2 minutes, puis mesurer deux fois à 1 minute d'écart :
-curl -s 127.0.0.1:8645/status | grep -oE '"height":[0-9]+'   # identiques
+curl -s 127.0.0.1:8545/status | grep -oE '"height":[0-9]+'   # identiques
 ssh root@192.168.1.23 "systemctl start uturoa"; ssh root@192.168.1.233 "systemctl start uturoa"
 # après 1 minute : la hauteur repart
 hauteurs
@@ -65,7 +65,7 @@ voté.
 
 ```bash
 ssh root@192.168.1.21 "systemctl stop uturoa; date"
-ssh root@192.168.1.21 "mv /var/lib/uturoa /var/lib/uturoa.sauvegarde && mkdir -m 700 /var/lib/uturoa && cp -p /var/lib/uturoa.sauvegarde/network.key /var/lib/uturoa/"
+ssh root@192.168.1.21 "mv /var/lib/uturoa /var/lib/uturoa.sauvegarde && mkdir -m 700 /var/lib/uturoa && cp -p /var/lib/uturoa.sauvegarde/network.key /var/lib/uturoa/ && chown -R uturoa:uturoa /var/lib/uturoa"
 # attendre 1 minute
 ssh root@192.168.1.21 "systemctl start uturoa"
 # après 2 minutes
