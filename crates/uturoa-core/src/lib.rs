@@ -45,6 +45,20 @@ pub fn encode<T: borsh::BorshSerialize>(value: &T) -> Vec<u8> {
     borsh::to_vec(value).unwrap_or_default()
 }
 
+/// Décodage borsh **canonique** : en plus du décodage strict, refuse toute
+/// donnée dont le ré-encodage diffère (par exemple une table aux clés en
+/// désordre ou en double). À utiliser pour ce qui vient d'un pair et contient
+/// des tables, comme un instantané d'état.
+pub fn decode_canonical<T: borsh::BorshDeserialize + borsh::BorshSerialize>(
+    bytes: &[u8],
+) -> Result<T, CoreError> {
+    let value: T = decode(bytes)?;
+    if encode(&value) != bytes {
+        return Err(CoreError::Encoding);
+    }
+    Ok(value)
+}
+
 /// Décodage borsh strict : refuse les octets en trop et toute valeur inconnue.
 pub fn decode<T: borsh::BorshDeserialize>(bytes: &[u8]) -> Result<T, CoreError> {
     borsh::from_slice(bytes).map_err(|_| CoreError::Encoding)

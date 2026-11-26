@@ -39,6 +39,7 @@ fn shared(dir: &std::path::Path) -> SharedRef {
             .map(|(i, k)| validator_entry(&k.public_key(), &format!("v{i}")))
             .collect(),
         block_interval_ms: None,
+        mint_phase_blocks: None,
     };
     let chain = Chain::open(dir, &genesis, Box::new(FakePow)).unwrap();
     Arc::new(Mutex::new(Shared::new(chain).unwrap()))

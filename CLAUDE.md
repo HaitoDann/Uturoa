@@ -57,6 +57,8 @@ cargo clippy -q --workspace --all-targets -- -D warnings
 cargo test -q --workspace
 cargo deny check                                        # failles et licences
 cargo test -q --release -p uturoa-state --test mint -- --ignored   # parcourt toute la phase de frappe
+cargo test -q --release -p uturoa-node --test bascule -- --ignored # 8 nœuds : frappe, inscription, bascule
+cd fuzz && cargo +nightly fuzz run --target x86_64-unknown-linux-gnu net_message -- -max_total_time=60
 
 # Réseau local
 export UTUROA_KEY_PASSWORD=pw
@@ -99,8 +101,10 @@ uturoa-wallet                       # portefeuille : ouvre le navigateur (--dir,
   Passer à un vote pondéré demanderait de modifier le moteur de consensus.
 - `Leave` est définitif : un opérateur parti ne peut pas se réinscrire avec
   la même adresse.
-- Pour tester la bascule sans 1 314 000 blocs, les tests raccourcissent la
-  phase 1 avec `set_phase_end_for_tests` (jamais utilisé par le protocole).
+- Pour répéter la bascule sans 1 314 000 blocs : `mint_phase_blocks` dans la
+  genèse (ou `devnet --mint-phase-blocks`), **réseaux d'essai seulement**.
+- Un instantané reçu d'un pair est décodé par `decode_canonical` : le
+  fuzzing a montré qu'un état aux tables désordonnées était sinon accepté.
 - RandomX ne peut pas changer de fil d'exécution : `RandomXHasher` le fait
   tourner dans un fil dédié et lui envoie les calculs par message (pas de
   code `unsafe`).
@@ -137,4 +141,4 @@ uturoa-wallet                       # portefeuille : ouvre le navigateur (--dir,
 | 6a | Portefeuille de bureau avec mineur intégré | fait |
 | 6b | Portefeuille mobile | à faire |
 | 7a | Déploiement Proxmox, exercices de panne (guide et test automatique `faults.rs`) | fait |
-| 7b | Fuzzing, répétition de la bascule sur un réseau à phase courte | à faire |
+| 7b | Fuzzing (nuit et rapide), répétition de la bascule sur 8 nœuds (`bascule.rs`, phase raccourcie par `mint_phase_blocks` en genèse) | fait |

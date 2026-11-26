@@ -301,8 +301,8 @@ impl Chain {
         if commit.height != h || commit.block_hash != block.hash() {
             bail!("certificat d'un autre bloc");
         }
-        let state: State =
-            uturoa_core::decode(state_bytes).map_err(|_| anyhow!("état illisible"))?;
+        let state: State = uturoa_core::decode_canonical(state_bytes)
+            .map_err(|_| anyhow!("état illisible ou non canonique"))?;
         if state.height != h || state.chain_id != self.state.chain_id {
             bail!("état d'une autre hauteur ou d'une autre chaîne");
         }

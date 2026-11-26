@@ -35,6 +35,7 @@ fn setup(n: usize) -> (GenesisFile, Vec<KeyPair>) {
             .map(|(i, k)| validator_entry(&k.public_key(), &format!("v{i}")))
             .collect(),
         block_interval_ms: None,
+        mint_phase_blocks: None,
     };
     (genesis, kps)
 }

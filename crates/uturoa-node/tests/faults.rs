@@ -97,6 +97,7 @@ async fn chain_survives_one_halts_safely_with_two_and_recovers() {
             .map(|(i, k)| validator_entry(&k.public_key(), &format!("v{i}")))
             .collect(),
         block_interval_ms: Some(200),
+        mint_phase_blocks: None,
     };
     let ports: Vec<u16> = (0..4)
         .map(|_| {

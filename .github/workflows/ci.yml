@@ -32,6 +32,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --locked
 
+  long:
+    name: Essais longs (bascule, phase de frappe complète)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --release --locked -p uturoa-node --test bascule -- --ignored
+      - run: cargo test --release --locked -p uturoa-state --test mint -- --ignored
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest

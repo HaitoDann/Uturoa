@@ -63,6 +63,7 @@ async fn four_validators_produce_blocks_mint_and_transfer() {
             .map(|(i, k)| validator_entry(&k.public_key(), &format!("v{i}")))
             .collect(),
         block_interval_ms: Some(200),
+        mint_phase_blocks: None,
     };
     // Ports réellement libres, choisis par le système : des ports fixes
     // peuvent tomber dans une plage réservée (fréquent sous Windows).

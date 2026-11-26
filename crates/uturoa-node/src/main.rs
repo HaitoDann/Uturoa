@@ -37,6 +37,10 @@ enum Command {
         /// Intervalle entre deux blocs, en millisecondes (12 000 par défaut).
         #[arg(long)]
         block_interval_ms: Option<u64>,
+        /// Phase de frappe raccourcie, en blocs, pour répéter la bascule.
+        /// Réseaux d'essai seulement.
+        #[arg(long)]
+        mint_phase_blocks: Option<u64>,
         /// Premier port réseau ; en local, le validateur i écoute sur port + i - 1,
         /// et avec --hosts, tous écoutent sur ce port.
         #[arg(long, default_value_t = 30_333)]
@@ -126,6 +130,7 @@ fn main() -> Result<()> {
             chain_id,
             mint_difficulty,
             block_interval_ms,
+            mint_phase_blocks,
             base_port,
             hosts,
             names,
@@ -161,6 +166,7 @@ fn main() -> Result<()> {
                 mint_difficulty,
                 validators: entries,
                 block_interval_ms,
+                mint_phase_blocks,
             };
             let path = dir.join("genesis.json");
             genesis.save(&path)?;

@@ -22,6 +22,11 @@ pub struct GenesisFile {
     /// Absent : 12 s. L'émission reste comptée en blocs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub block_interval_ms: Option<u64>,
+    /// Durée de la phase de frappe en blocs, pour **répéter la bascule** sur un
+    /// réseau d'essai. Absent : 1 314 000 blocs. Ne jamais l'utiliser pour le
+    /// réseau principal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mint_phase_blocks: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,12 +80,19 @@ impl GenesisFile {
         if let Some(ms) = self.block_interval_ms {
             params.min_block_interval_ms = ms;
         }
-        Ok(State::genesis_with_validators(
+        let mut state = State::genesis_with_validators(
             self.chain_id.clone(),
             params,
             self.mint_difficulty,
             bootstrap,
-        ))
+        );
+        if let Some(blocks) = self.mint_phase_blocks {
+            if blocks == 0 {
+                bail!("la phase de frappe doit durer au moins un bloc");
+            }
+            state.set_phase_end_for_tests(blocks);
+        }
+        Ok(state)
     }
 }
 
