@@ -52,6 +52,9 @@ pub enum TxBody {
         info: ValidatorInfo,
         /// Commission sur les récompenses des délégants, en points de base.
         commission_bps: u16,
+        /// Plafond de commission, définitif : la commission ne pourra jamais
+        /// le dépasser.
+        max_commission_bps: u16,
     } = 0x06,
     /// Met à jour la fiche et la commission du validateur de l'émetteur.
     UpdateValidatorInfo {
@@ -245,6 +248,7 @@ mod tests {
                 key: k,
                 info: ValidatorInfo::default(),
                 commission_bps: 0,
+                max_commission_bps: 0,
             },
             TxBody::UpdateValidatorInfo {
                 info: ValidatorInfo::default(),

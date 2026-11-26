@@ -27,7 +27,8 @@ Monnaie minimaliste en Rust : une seule fonction, envoyer de la valeur.
   des validateurs.
 - Phase 2 : preuve d'enjeu avec délégation. Vote à poids égal entre les 21
   validateurs les mieux classés par stake (10 000 pièces de stake propre au
-  minimum) ; commission de 10 % au plus ; forge partagée chaque jour ;
+  minimum) ; commission sous un plafond déclaré à l'inscription (hausse
+  d'1 point par jour au plus) ; forge partagée chaque jour ;
   économie « melt & forge » (`forge = réservoir / 89 478 485`, frais
   80 % fondus et 20 % au proposeur).
 - Consensus BFT de type **Tendermint**. Ce n'est pas un algorithme maison :

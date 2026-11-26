@@ -162,6 +162,7 @@ impl Net {
                 key: k.public_key(),
                 info: info(name),
                 commission_bps: 500,
+                max_commission_bps: 2_000,
             },
         );
         let del = self.tx(
@@ -342,10 +343,22 @@ fn commission_rules() {
     // Même époque que l'inscription : pas de changement.
     assert!(upd(&mut net, 600).is_err());
     net.run_to(EPOCH_BLOCKS);
-    assert!(upd(&mut net, 1_100).is_err()); // au-delà de 10 %
     assert!(upd(&mut net, 700).is_err()); // +2 points
     assert!(upd(&mut net, 600).is_ok()); // +1 point
     assert!(upd(&mut net, 700).is_err()); // déjà changé aujourd'hui
+    assert!(upd(&mut net, 100).is_ok()); // une baisse est toujours permise
+    // Au-delà du plafond déclaré (20 %), jamais, même un point à la fois.
+    for day in 2..=21u64 {
+        net.run_to(day * EPOCH_BLOCKS);
+        let current = net
+            .s
+            .staking()
+            .validator(&Net::addr(&v))
+            .unwrap()
+            .commission_bps;
+        let r = upd(&mut net, current + 100);
+        assert_eq!(r.is_ok(), current + 100 <= 2_000, "jour {day}");
+    }
 }
 
 #[test]
@@ -481,6 +494,7 @@ fn double_signing_is_punished_once() {
     let v = net.s.staking().validator(&Net::addr(cheater)).unwrap();
     assert_eq!(v.status, ValidatorStatus::Banned);
     assert_eq!(v.self_stake, 0);
+    // Pas d'autre délégant ici : seule la caution propre est confisquée.
     let reward = MIN_VALIDATOR_STAKE / 10;
     assert_eq!(net.s.balance(&Net::addr(&reporter)), before - fee + reward);
     // 90 % fondus : l'offre baisse d'environ 9 000 pièces (la forge du bloc
@@ -520,6 +534,7 @@ fn registration_rules() {
             key: boot[0].public_key(),
             info: info("x"),
             commission_bps: 0,
+            max_commission_bps: 1_000,
         },
     );
     assert!(
@@ -528,18 +543,78 @@ fn registration_rules() {
             .is_err()
     );
     *net.nonces.get_mut(&Net::addr(&k)).unwrap() -= 1;
-    // Commission au-delà de 10 %.
+    // Commission au-delà du plafond déclaré.
     let high = net.tx(
         &k,
         TxBody::RegisterValidator {
             key: k.public_key(),
             info: info("x"),
             commission_bps: 1_001,
+            max_commission_bps: 1_000,
         },
     );
     assert!(
         net.s
             .apply_tx(&high, &Address::from_bytes([0xEE; 20]))
             .is_err()
+    );
+}
+
+#[test]
+fn delegators_of_a_double_signer_lose_one_percent() {
+    let phase_end = 10;
+    let (mut net, _) = Net::new(4, phase_end);
+    let vals: Vec<KeyPair> = (0..5)
+        .map(|i| net.join(&format!("v{i}"), 20_000, 10_000))
+        .collect();
+    let alice = KeyPair::generate();
+    net.s
+        .credit_for_tests(&Net::addr(&alice), 2_000 * UNITS_PER_COIN);
+    let d = net.tx(
+        &alice,
+        TxBody::Delegate {
+            validator: vals[2].public_key(),
+            amount: 1_000 * UNITS_PER_COIN,
+        },
+    );
+    net.step(&[d]).unwrap();
+    net.run_to(phase_end + 5);
+    let h = net.s.height;
+    let set = net.s.staking().set_at(h);
+    let idx = set.iter().position(|k| *k == vals[2].public_key()).unwrap() as u16;
+    let vote = |hash: Hash| Vote {
+        chain_id: CHAIN.into(),
+        kind: VoteKind::Precommit,
+        height: h,
+        round: 0,
+        block_hash: Some(hash),
+    };
+    let ev = Evidence::Votes(
+        SignedVote::new(vote([1; 32]), idx, &vals[2]),
+        SignedVote::new(vote([2; 32]), idx, &vals[2]),
+    );
+    let reporter = KeyPair::generate();
+    net.s
+        .credit_for_tests(&Net::addr(&reporter), UNITS_PER_COIN);
+    let rep = net.tx(
+        &reporter,
+        TxBody::ReportEquivocation {
+            evidence: encode(&ev),
+        },
+    );
+    let fee = rep.tx.fee;
+    net.step(&[rep]).unwrap();
+    // La délégation d'Alice (99 % restants) est partie en restitution.
+    assert_eq!(
+        net.s
+            .staking()
+            .delegation(&Net::addr(&alice), &Net::addr(&vals[2])),
+        0
+    );
+    // Le rapporteur touche 10 % de la caution et du 1 % d'Alice.
+    let slashed = MIN_VALIDATOR_STAKE + 10 * UNITS_PER_COIN;
+    assert_eq!(
+        net.s.balance(&Net::addr(&reporter)),
+        UNITS_PER_COIN - fee + slashed / 10
     );
 }

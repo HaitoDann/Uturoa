@@ -16,10 +16,14 @@ use uturoa_core::{
 
 /// Stake propre minimal d'un validateur : 10 000 pièces.
 pub const MIN_VALIDATOR_STAKE: Amount = 10_000 * UNITS_PER_COIN;
-/// Commission maximale : 10 % (1 000 points de base).
-pub const MAX_COMMISSION_BPS: u16 = 1_000;
-/// Variation maximale de la commission par époque : 1 point.
-pub const MAX_COMMISSION_CHANGE_BPS: u16 = 100;
+/// Commission proposée par défaut par les portefeuilles : 10 %.
+pub const DEFAULT_COMMISSION_BPS: u16 = 1_000;
+/// Plafond absolu d'une commission : 100 %.
+pub const COMMISSION_LIMIT_BPS: u16 = 10_000;
+/// Hausse maximale de la commission par époque : 1 point.
+pub const MAX_COMMISSION_RAISE_BPS: u16 = 100;
+/// Part des délégations confisquée en cas de double signature : 1 %.
+pub const DELEGATOR_SLASH_PERCENT: u128 = 1;
 /// Époque : un jour de blocs de 12 s.
 pub const EPOCH_BLOCKS: u64 = 7_200;
 /// Présence minimale pour toucher sa part : 97 %.
@@ -58,6 +62,8 @@ pub struct ValidatorRecord {
     pub key: PublicKey,
     pub info: ValidatorInfo,
     pub commission_bps: u16,
+    /// Plafond déclaré à l'inscription, définitif.
+    pub max_commission_bps: u16,
     /// Époque du dernier changement de commission.
     pub commission_epoch: u64,
     pub status: ValidatorStatus,
@@ -262,6 +268,7 @@ impl State {
                     key,
                     info,
                     commission_bps: 0,
+                    max_commission_bps: 0,
                     commission_epoch: 0,
                     status: ValidatorStatus::Candidate,
                     bootstrap: true,
@@ -478,6 +485,7 @@ impl State {
                 key,
                 info,
                 commission_bps,
+                max_commission_bps,
             } => {
                 if self.staking.validators.contains_key(sender) {
                     return Err(TxError::Malformed("validateur déjà inscrit"));
@@ -485,7 +493,10 @@ impl State {
                 if self.staking.keys.contains_key(key) {
                     return Err(TxError::Malformed("clé de consensus déjà utilisée"));
                 }
-                if *commission_bps > MAX_COMMISSION_BPS || !info_is_valid(info) {
+                if *max_commission_bps > COMMISSION_LIMIT_BPS
+                    || *commission_bps > *max_commission_bps
+                    || !info_is_valid(info)
+                {
                     return Err(TxError::Malformed("fiche ou commission invalide"));
                 }
                 self.staking.keys.insert(key.clone(), *sender);
@@ -495,6 +506,7 @@ impl State {
                         key: key.clone(),
                         info: info.clone(),
                         commission_bps: *commission_bps,
+                        max_commission_bps: *max_commission_bps,
                         commission_epoch: epoch_of(height),
                         status: ValidatorStatus::Candidate,
                         bootstrap: false,
@@ -523,14 +535,21 @@ impl State {
                 if v.status == ValidatorStatus::Banned || !info_is_valid(info) {
                     return Err(TxError::Malformed("fiche invalide ou validateur exclu"));
                 }
-                if *commission_bps > MAX_COMMISSION_BPS {
-                    return Err(TxError::Malformed("commission au-delà de 10 %"));
+                if *commission_bps > v.max_commission_bps {
+                    return Err(TxError::Malformed("commission au-delà du plafond déclaré"));
+                }
+                if *commission_bps > v.commission_bps {
+                    // Hausse : 1 point au plus, une fois par époque.
+                    let raise = commission_bps.saturating_sub(v.commission_bps);
+                    if raise > MAX_COMMISSION_RAISE_BPS || v.commission_epoch == epoch {
+                        return Err(TxError::Malformed(
+                            "commission : hausse d'1 point par jour au plus",
+                        ));
+                    }
                 }
                 if *commission_bps != v.commission_bps {
-                    let change = commission_bps.abs_diff(v.commission_bps);
-                    if change > MAX_COMMISSION_CHANGE_BPS || v.commission_epoch == epoch {
-                        return Err(TxError::Malformed("commission : 1 point par jour au plus"));
-                    }
+                    // Une baisse est toujours permise ; elle compte comme le
+                    // changement du jour.
                     v.commission_bps = *commission_bps;
                     v.commission_epoch = epoch;
                 }
@@ -658,8 +677,9 @@ impl State {
     }
 
     /// Double signature prouvée : stake propre confisqué (y compris en
-    /// restitution), 10 % à celui qui prouve, le reste fondu ; exclusion
-    /// définitive ; les délégations des autres sont mises en restitution.
+    /// restitution) et 1 % des délégations ; 10 % à celui qui prouve, le
+    /// reste fondu ; exclusion définitive ; les délégations restantes sont
+    /// mises en restitution.
     fn punish_equivocation(
         &mut self,
         reporter: &Address,
@@ -705,6 +725,21 @@ impl State {
         for k in pending {
             let amount = self.staking.unbonding.remove(&k).unwrap_or(0);
             slashed = slashed.checked_add(amount).ok_or(TxError::Overflow)?;
+        }
+        // Délégants : 1 % de leur délégation, pour inciter à bien choisir.
+        let delegations: Vec<(Address, Amount)> = self
+            .staking
+            .delegations
+            .iter()
+            .filter(|((_, o), _)| *o == operator)
+            .map(|((d, _), a)| (*d, *a))
+            .collect();
+        for (delegator, amount) in delegations {
+            let cut = pro_rata(amount, DELEGATOR_SLASH_PERCENT, 100);
+            self.staking
+                .delegations
+                .insert((delegator, operator), amount.saturating_sub(cut));
+            slashed = slashed.checked_add(cut).ok_or(TxError::Overflow)?;
         }
         self.staking
             .unbond_all(&operator, height.saturating_add(UNBONDING_BLOCKS))?;

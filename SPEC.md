@@ -96,9 +96,11 @@ forment l'ensemble actif.
 
 **Validateurs** :
 - inscription (`RegisterValidator`) : clé de consensus unique, fiche
-  (nom de 1 à 64 octets, site et contact de 128 octets au plus), commission ;
-- **commission** : 10 % au plus, modifiable d'1 point au plus, une fois par
-  époque ;
+  (nom de 1 à 64 octets, site et contact de 128 octets au plus), commission,
+  et **plafond de commission déclaré, définitif** (100 % au plus) ;
+- **commission** : 10 % proposés par défaut par les portefeuilles ; jamais
+  au-delà du plafond déclaré ; une hausse est d'1 point au plus et une fois
+  par époque ; une baisse est toujours permise ;
 - **départ** (`Leave`) : définitif ; tout le stake délégué au validateur part
   en restitution.
 
@@ -120,8 +122,10 @@ l'ensemble tomberait sous 4 validateurs. `Unjail` est possible après une
 **Double signature** (`ReportEquivocation`, preuve vérifiée par la clé seule,
 contre l'ensemble de la hauteur de la faute, jusqu'à 21 jours après) :
 - stake propre confisqué à 100 %, y compris ce qui est en restitution ;
-- 10 % à celui qui apporte la preuve, 90 % fondus ;
-- exclusion définitive ; les délégations des autres partent en restitution ;
+- **1 % des délégations** en cours vers ce validateur, pour inciter à bien
+  choisir ;
+- 10 % du total confisqué à celui qui apporte la preuve, 90 % fondus ;
+- exclusion définitive ; les délégations restantes partent en restitution ;
 - une même preuve n'est sanctionnée qu'une fois.
 
 **Mise à jour du protocole** : à chaque fin d'époque, si plus des 2/3 des
