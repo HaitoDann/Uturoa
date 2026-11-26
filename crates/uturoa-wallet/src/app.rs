@@ -60,13 +60,23 @@ pub fn new_token() -> String {
     hex::encode(bytes)
 }
 
-type ApiResult = Result<Json<Value>, Response>;
+/// Erreur d'une route : code HTTP et message, transformés en JSON. Un type
+/// compact plutôt qu'une `Response` entière.
+pub struct ApiError(StatusCode, String);
 
-fn fail(code: StatusCode, message: impl std::fmt::Display) -> Response {
-    (code, Json(json!({ "error": message.to_string() }))).into_response()
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        (self.0, Json(json!({ "error": self.1 }))).into_response()
+    }
 }
 
-fn bad(e: impl std::fmt::Display) -> Response {
+type ApiResult = Result<Json<Value>, ApiError>;
+
+fn fail(code: StatusCode, message: impl std::fmt::Display) -> ApiError {
+    ApiError(code, message.to_string())
+}
+
+fn bad(e: impl std::fmt::Display) -> ApiError {
     fail(StatusCode::BAD_REQUEST, e)
 }
 
@@ -163,7 +173,7 @@ async fn guard(State(s): State<Shared>, headers: HeaderMap, req: Request, next: 
             .and_then(|v| v.to_str().ok())
             .unwrap_or_default();
         if token != st.token {
-            return fail(StatusCode::FORBIDDEN, "jeton absent ou invalide");
+            return fail(StatusCode::FORBIDDEN, "jeton absent ou invalide").into_response();
         }
         if st.seed.is_some() && st.last_activity.elapsed() > LOCK_AFTER {
             st.seed = None;
