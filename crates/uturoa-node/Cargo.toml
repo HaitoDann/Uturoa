@@ -1,0 +1,32 @@
+[package]
+name = "uturoa-node"
+description = "Nœud Uturoa : genèse, stockage, chaîne, réseau local"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "uturoa-node"
+path = "src/main.rs"
+
+[dependencies]
+uturoa-crypto.workspace = true
+uturoa-core.workspace = true
+uturoa-state.workspace = true
+uturoa-consensus.workspace = true
+uturoa-keystore.workspace = true
+uturoa-pow.workspace = true
+anyhow.workspace = true
+borsh.workspace = true
+clap.workspace = true
+redb.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

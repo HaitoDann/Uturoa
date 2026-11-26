@@ -76,7 +76,7 @@ impl From<CoreError> for TxError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct State {
     pub chain_id: String,
     pub protocol_version: u32,

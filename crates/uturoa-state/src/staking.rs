@@ -152,6 +152,11 @@ impl Staking {
             .unwrap_or(0)
     }
 
+    /// Opérateur d'une clé de consensus.
+    pub fn operator_of(&self, key: &PublicKey) -> Option<Address> {
+        self.keys.get(key).copied()
+    }
+
     pub fn active(&self) -> &[Address] {
         &self.active
     }

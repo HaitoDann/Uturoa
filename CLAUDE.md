@@ -45,6 +45,7 @@ Monnaie minimaliste en Rust : une seule fonction, envoyer de la valeur.
 | `uturoa-state` | Machine d'état : comptes, réserve, envois, multisignatures, frais dynamiques, melt, frappe (parts, partage, difficulté ; RandomX abstrait par `PowHasher`), forge (partagée par `staking`) |
 | `uturoa-state::staking` | Validateurs, délégation, présence (certificat du bloc précédent), mise à l'écart, restitution, double signature, récompenses par époque, signal de mise à jour, bascule |
 | `uturoa-pow` | RandomX (crate `randomx-rs`, C++ : il faut CMake et un compilateur C++) : vérification en mode léger et minage |
+| `uturoa-node` | Nœud : fichier de genèse JSON, stockage redb (blocs, certificats, instantanés tous les 1 000 blocs), chaîne (construction, vérification complète, validation définitive, rejeu au redémarrage), commandes `devnet` et `info` |
 | `uturoa-keystore` | Fichiers de clés chiffrés ; mot de passe par `UTUROA_KEY_PASSWORD` ou fichier |
 
 ## 4. Commandes
@@ -55,6 +56,11 @@ cargo clippy -q --workspace --all-targets -- -D warnings
 cargo test -q --workspace
 cargo deny check                                        # failles et licences
 cargo test -q --release -p uturoa-state --test mint -- --ignored   # parcourt toute la phase de frappe
+
+# Réseau local
+export UTUROA_KEY_PASSWORD=pw
+uturoa-node devnet --dir net
+uturoa-node info --genesis net/genesis.json --data-dir net/d1
 ```
 
 ## 5. Conventions
@@ -93,6 +99,8 @@ cargo test -q --release -p uturoa-state --test mint -- --ignored   # parcourt to
 | 2 | État : comptes, envoi, multisignatures, frais, melt & forge | fait |
 | 3 | Frappe RandomX : `MintShare`, partage par période, difficulté | fait |
 | 4 | Preuve d'enjeu : délégation, sélection, plafond de vote, sanctions, bascule | fait |
-| 5 | Nœud : réseau, stockage, synchronisation par instantané, API, explorateur | à faire |
+| 5a | Nœud : genèse, stockage, chaîne, `devnet` | fait |
+| 5b | Nœud : réseau libp2p, boucle de consensus, mempool, preuves d'équivoque soumises d'office | à faire |
+| 5c | Nœud : API, synchronisation par instantané, explorateur | à faire |
 | 6 | Portefeuilles (bureau avec mineur intégré, mobile) | à faire |
 | 7 | Testnet public, fuzzing, essais de panne, répétition complète frappe → bascule | à faire |

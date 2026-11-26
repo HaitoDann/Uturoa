@@ -5,6 +5,7 @@ members = [
     "crates/uturoa-consensus",
     "crates/uturoa-state",
     "crates/uturoa-pow",
+    "crates/uturoa-node",
     "crates/uturoa-keystore",
 ]
 resolver = "3"
@@ -23,6 +24,7 @@ uturoa-core = { path = "crates/uturoa-core" }
 uturoa-consensus = { path = "crates/uturoa-consensus" }
 uturoa-state = { path = "crates/uturoa-state" }
 uturoa-pow = { path = "crates/uturoa-pow" }
+uturoa-node = { path = "crates/uturoa-node" }
 anyhow = "1"
 argon2 = "0.5"
 bech32 = "0.9"
@@ -37,6 +39,8 @@ serde_json = "1"
 tempfile = "3"
 thiserror = "2"
 randomx-rs = "1.6"
+clap = { version = "4", features = ["derive"] }
+redb = "2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
