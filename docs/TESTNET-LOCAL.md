@@ -92,6 +92,23 @@ un bloc par seconde). Ensuite, envoyer des pièces à quelqu'un :
 
 Les soldes se vérifient dans l'explorateur (case « Rechercher un compte »).
 
+### Avec le portefeuille
+
+Le portefeuille de bureau fait tout cela depuis le navigateur :
+
+```bash
+./uturoa-wallet
+```
+
+Il s'ouvre dans le navigateur. Créer un portefeuille (noter les 12 mots),
+puis dans **Réglages**, indiquer le nœud : `127.0.0.1:8545`. L'onglet
+**Frapper** lance la frappe sur le nombre de cœurs choisi, **Envoyer** montre
+les frais et le solde restant avant de confirmer.
+
+Le portefeuille est rangé dans `~/.uturoa-wallet` (Windows :
+`C:\Users\<vous>\.uturoa-wallet`). Si un mineur tourne sur la même machine
+que le nœud, les blocs ralentissent : le nœud vérifie chaque part reçue.
+
 ## 4. Un réseau sur plusieurs machines
 
 Exemple avec 4 machines : 192.168.1.21 à 192.168.1.24.
@@ -185,8 +202,9 @@ fichier : ce réglage n'est acceptable que pour un réseau de test.
 
 ## 6. Limites connues
 
-- `mine`, `send` et `new-key` sont des outils de test : les vrais portefeuilles
-  viendront plus tard.
+- `mine`, `send` et `new-key` sont des outils de test en ligne de commande ;
+  le portefeuille de bureau est `uturoa-wallet`. Le portefeuille mobile
+  viendra plus tard.
 - La frappe de test utilise le vrai RandomX en mode léger : un PC ordinaire
   trouve quelques dizaines de parts par seconde à difficulté 1. La difficulté
   s'ajuste toutes les 50 blocs.

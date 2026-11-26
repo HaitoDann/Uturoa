@@ -46,6 +46,7 @@ Monnaie minimaliste en Rust : une seule fonction, envoyer de la valeur.
 | `uturoa-state::staking` | Validateurs, délégation, présence (certificat du bloc précédent), mise à l'écart, restitution, double signature, récompenses par époque, signal de mise à jour, bascule |
 | `uturoa-pow` | RandomX (crate `randomx-rs`, C++ : il faut CMake et un compilateur C++) : vérification en mode léger et minage |
 | `uturoa-node` | Nœud : genèse JSON, stockage redb (blocs, certificats, instantanés, garde et verrou de consensus), chaîne, mempool, réseau libp2p **ouvert** (gossip, rattrapage, instantané), boucle de consensus, soumission automatique des preuves d'équivoque, API HTTP et explorateur (`--api`), client de test ; commandes `devnet`, `run`, `info`, `new-key`, `mine`, `send` |
+| `uturoa-wallet` | Portefeuille de bureau : page locale sur 127.0.0.1 (jeton aléatoire), phrase de 12 mots chiffrée, comptes dérivés, envoi avec aperçu, mineur RandomX multicœur, délégation |
 | `uturoa-keystore` | Fichiers de clés chiffrés ; mot de passe par `UTUROA_KEY_PASSWORD` ou fichier |
 
 ## 4. Commandes
@@ -66,6 +67,7 @@ uturoa-node info --genesis net/genesis.json --data-dir net/d1
 uturoa-node new-key --out alice.json
 uturoa-node mine --api 127.0.0.1:8545 --address utu1…
 uturoa-node send --api 127.0.0.1:8545 --key alice.json --to utu1… --amount 12,5
+uturoa-wallet                       # portefeuille : ouvre le navigateur (--dir, --port, --no-browser)
 ```
 
 ## 5. Conventions
@@ -105,8 +107,13 @@ uturoa-node send --api 127.0.0.1:8545 --key alice.json --to utu1… --amount 12,
 - Une part est vérifiée par RandomX à son arrivée ; `CachedPow` mémoïse les
   empreintes, et `Chain` garde l'état résultant du dernier bloc vérifié (clé :
   empreinte du bloc **entier**, jamais de l'en-tête seul).
-- `mine`, `send` et `new-key` sont des outils de test en attendant les
-  portefeuilles (lot 6).
+- `mine`, `send` et `new-key` restent des outils de test en ligne de
+  commande ; le portefeuille est `uturoa-wallet`.
+- Portefeuille : comptes dérivés par `BLAKE3-derive_key("Uturoa portefeuille
+  v1 compte ed25519", graine BIP-39 ‖ i)` ; ne jamais changer cette chaîne,
+  sinon les mêmes 12 mots ne redonnent plus les mêmes comptes.
+- Un nœud vérifie chaque part reçue avec RandomX (environ 25 ms) : un mineur
+  sur la même machine que le nœud ralentit les blocs.
 - Si RandomX échoue localement, `RandomXHasher` renvoie une empreinte qui ne
   satisfait aucune cible : le nœud refuse la part (risque de blocage, jamais
   d'acceptation à tort).
@@ -123,5 +130,6 @@ uturoa-node send --api 127.0.0.1:8545 --key alice.json --to utu1… --amount 12,
 | 5a | Nœud : genèse, stockage, chaîne, `devnet` | fait |
 | 5b | Nœud : réseau libp2p, boucle de consensus, mempool, preuves d'équivoque soumises d'office | fait |
 | 5c | Nœud : API, synchronisation par instantané, explorateur, outils de test (`mine`, `send`) | fait |
-| 6 | Portefeuilles (bureau avec mineur intégré, mobile) | à faire |
+| 6a | Portefeuille de bureau avec mineur intégré | fait |
+| 6b | Portefeuille mobile | à faire |
 | 7 | Testnet public, fuzzing, essais de panne, répétition complète frappe → bascule | à faire |

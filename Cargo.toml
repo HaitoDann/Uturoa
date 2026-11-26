@@ -6,6 +6,7 @@ members = [
     "crates/uturoa-state",
     "crates/uturoa-pow",
     "crates/uturoa-node",
+    "crates/uturoa-wallet",
     "crates/uturoa-keystore",
 ]
 resolver = "3"
@@ -48,6 +49,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 axum = "0.8"
 tower = { version = "0.5", features = ["util", "limit"] }
 http-body-util = "0.1"
+bip39 = { version = "2", default-features = false, features = ["std"] }
 redb = "2"
 
 [workspace.lints.rust]

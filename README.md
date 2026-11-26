@@ -21,6 +21,7 @@ Pré-alpha. Le dépôt contient pour l'instant :
 | `uturoa-state` | Machine d'état : comptes, envois, multisignatures, frais dynamiques, frappe, melt & forge |
 | `uturoa-pow` | Preuve de travail RandomX : vérification et minage des parts de frappe |
 | `uturoa-node` | Nœud : genèse, stockage, chaîne ; `uturoa-node devnet` crée un réseau local |
+| `uturoa-wallet` | Portefeuille de bureau (page locale) : comptes, envois, frappe intégrée, délégation |
 | `uturoa-keystore` | Fichiers de clés chiffrés (Argon2 et ChaCha20-Poly1305) |
 
 Rien n'est déployé. Aucune pièce n'existe.

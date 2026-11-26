@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portefeuille Uturoa</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--fg:#17202b;--muted:#5a6675;--line:#dde2e8;--accent:#1f5f7a;--accent-fg:#fff;--ok:#2f7a4a;--warn:#a36a00;--bad:#b3261e}
+@media (prefers-color-scheme:dark){:root{--bg:#0f141a;--card:#161d25;--fg:#e6ebf0;--muted:#9aa7b5;--line:#2a3541;--accent:#6fb4d1;--accent-fg:#0f141a;--ok:#6cc58f;--warn:#e0b04f;--bad:#f08a80}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:16px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+h1{margin:0;font-size:1.4rem}h2{margin:0 0 10px;font-size:1.05rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.muted{color:var(--muted)}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+label{display:flex;flex-direction:column;gap:4px;font-size:.9rem;color:var(--muted)}
+input,select,textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg);width:100%}
+textarea{min-height:72px;resize:vertical}
+button{font:inherit;font-weight:600;padding:8px 14px;border:0;border-radius:4px;background:var(--accent);color:var(--accent-fg);cursor:pointer}
+button.secondary{background:transparent;color:var(--accent);border:1px solid var(--line)}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.row>*{flex:1;min-width:0}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav button{background:transparent;color:var(--fg);border:1px solid var(--line)}
+nav button[aria-current="page"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.phrase{font-family:ui-monospace,Menlo,monospace;background:var(--bg);border:1px dashed var(--warn);border-radius:4px;padding:12px;line-height:1.9;word-spacing:6px}
+.big{font-size:1.8rem;font-weight:700;font-variant-numeric:tabular-nums}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+td,th{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600;font-size:.85rem}
+.addr{font-family:ui-monospace,Menlo,monospace;font-size:.82rem;word-break:break-all}
+.msg{padding:10px 12px;border-radius:4px;background:var(--bg);border:1px solid var(--line)}
+.scroll{overflow-x:auto}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Portefeuille Uturoa</h1>
+    <div class="row" style="flex:0 0 auto">
+      <span id="node-pill" class="muted"></span>
+      <button id="lock-btn" class="secondary" hidden>Verrouiller</button>
+    </div>
+  </header>
+  <div id="error" class="msg bad" hidden></div>
+
+  <!-- Création ou restauration -->
+  <section id="setup" class="card" hidden>
+    <h2>Bienvenue</h2>
+    <p class="muted">Ce portefeuille garde vos clés sur cet ordinateur. Elles ne le quittent jamais.</p>
+    <div class="row">
+      <button id="new-btn">Créer un portefeuille</button>
+      <button id="restore-btn" class="secondary">Restaurer avec mes 12 mots</button>
+    </div>
+    <div id="new-box" hidden>
+      <p><b>Notez ces 12 mots sur papier</b>, dans l'ordre, et gardez-les en lieu sûr. Ils sont la seule façon de récupérer vos pièces si cet ordinateur est perdu. Personne ne pourra vous les redonner.</p>
+      <div id="new-phrase" class="phrase"></div>
+    </div>
+    <div id="restore-box" hidden>
+      <label>Vos 12 mots, séparés par des espaces<textarea id="restore-phrase" autocomplete="off" spellcheck="false"></textarea></label>
+    </div>
+    <div id="password-box" hidden>
+      <label>Mot de passe de ce portefeuille (8 caractères au moins)<input id="new-password" type="password" autocomplete="new-password"></label>
+      <label>Le même, une seconde fois<input id="new-password2" type="password" autocomplete="new-password"></label>
+      <label style="flex-direction:row;align-items:center;gap:8px;color:var(--fg)"><input id="noted" type="checkbox" style="width:auto"> J'ai noté mes 12 mots</label>
+      <button id="create-btn">Ouvrir le portefeuille</button>
+    </div>
+  </section>
+
+  <!-- Déverrouillage -->
+  <section id="unlock" class="card" hidden>
+    <h2>Portefeuille verrouillé</h2>
+    <form id="unlock-form" class="row">
+      <label>Mot de passe<input id="password" type="password" autocomplete="current-password"></label>
+      <button>Déverrouiller</button>
+    </form>
+  </section>
+
+  <!-- Portefeuille ouvert -->
+  <div id="wallet" hidden>
+    <nav aria-label="Sections">
+      <button data-tab="accounts" aria-current="page">Comptes</button>
+      <button data-tab="send">Envoyer</button>
+      <button data-tab="mine">Frapper</button>
+      <button data-tab="delegate">Déléguer</button>
+      <button data-tab="settings">Réglages</button>
+    </nav>
+
+    <section data-panel="accounts" class="card" style="margin-top:12px">
+      <div><span class="muted">Total</span><div id="total" class="big">–</div></div>
+      <div class="scroll"><table>
+        <thead><tr><th>Compte</th><th>Adresse</th><th>Solde</th></tr></thead>
+        <tbody id="accounts"></tbody>
+      </table></div>
+      <form id="add-account" class="row">
+        <label>Nouveau compte<input id="account-label" placeholder="Épargne, Boutique…"></label>
+        <button class="secondary">Ajouter</button>
+      </form>
+    </section>
+
+    <section data-panel="send" class="card" style="margin-top:12px" hidden>
+      <h2>Envoyer des pièces</h2>
+      <label>Depuis<select id="send-from"></select></label>
+      <label>Vers (adresse utu1…)<input id="send-to" autocomplete="off" spellcheck="false"></label>
+      <div class="row">
+        <label>Montant (pièces)<input id="send-amount" inputmode="decimal" placeholder="12,5"></label>
+        <label>Mémo (facultatif, 64 octets)<input id="send-memo" maxlength="64"></label>
+      </div>
+      <button id="preview-btn">Vérifier</button>
+      <div id="send-preview" class="msg" hidden></div>
+      <button id="send-btn" hidden>Confirmer l'envoi</button>
+    </section>
+
+    <section data-panel="mine" class="card" style="margin-top:12px" hidden>
+      <h2>Frapper des pièces</h2>
+      <p class="muted">Votre ordinateur calcule des parts RandomX. Toutes les 10 minutes, les pièces frappées sont partagées entre les parts valides. Cela utilise le processeur : laissez au moins un cœur libre.</p>
+      <div class="row">
+        <label>Compte qui reçoit<select id="mine-account"></select></label>
+        <label>Cœurs utilisés<input id="mine-threads" type="number" min="1" max="64"></label>
+      </div>
+      <div class="row">
+        <button id="mine-start">Démarrer</button>
+        <button id="mine-stop" class="secondary">Arrêter</button>
+      </div>
+      <div id="mine-status" class="msg">Arrêté.</div>
+    </section>
+
+    <section data-panel="delegate" class="card" style="margin-top:12px" hidden>
+      <h2>Déléguer à un validateur</h2>
+      <p class="muted">Vos pièces restent à vous ; elles aident un validateur à être choisi, et vous recevez une part de ses récompenses (après sa commission). Retirer une délégation prend 21 jours. Si le validateur triche, 1 % de votre délégation est perdu.</p>
+      <label>Depuis<select id="del-from"></select></label>
+      <label>Validateur<select id="del-validator"></select></label>
+      <label>Montant (pièces)<input id="del-amount" inputmode="decimal"></label>
+      <button id="del-preview">Vérifier</button>
+      <div id="del-result" class="msg" hidden></div>
+      <button id="del-send" hidden>Confirmer la délégation</button>
+    </section>
+
+    <section data-panel="settings" class="card" style="margin-top:12px" hidden>
+      <h2>Réglages</h2>
+      <form id="node-form" class="row">
+        <label>Nœud (adresse de son API)<input id="node-addr" placeholder="127.0.0.1:8545"></label>
+        <button class="secondary">Enregistrer</button>
+      </form>
+      <form id="reveal-form" class="row">
+        <label>Revoir mes 12 mots (mot de passe)<input id="reveal-password" type="password" autocomplete="current-password"></label>
+        <button class="secondary">Afficher</button>
+      </form>
+      <div id="reveal-phrase" class="phrase" hidden></div>
+    </section>
+  </div>
+</main>
+<script>
+const TOKEN = "__APP_TOKEN__";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let state = null, newPhrase = '', mode = 'new';
+
+async function api(path, body) {
+  const r = await fetch('/api' + path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: {'x-app-token': TOKEN, 'content-type': 'application/json'},
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || ('erreur ' + r.status));
+  return data;
+}
+function showError(e) { const el = $('error'); el.textContent = e ? String(e.message || e) : ''; el.hidden = !e; }
+function show(id) { for (const s of ['setup', 'unlock', 'wallet']) $(s).hidden = s !== id; }
+
+async function refresh() {
+  try {
+    state = await api('/state');
+    $('node-pill').textContent = 'Nœud : ' + state.node;
+    $('lock-btn').hidden = !state.unlocked;
+    if (!state.created) { show('setup'); return; }
+    if (!state.unlocked) { show('unlock'); return; }
+    show('wallet');
+    $('node-addr').value = state.node;
+    const options = state.accounts.map(a => `<option value="${a.index}">${esc(a.label)}</option>`).join('');
+    for (const id of ['send-from', 'mine-account', 'del-from']) {
+      const keep = $(id).value; $(id).innerHTML = options; if (keep) $(id).value = keep;
+    }
+    await overview();
+  } catch (e) { showError(e); }
+}
+
+async function overview() {
+  try {
+    const o = await api('/overview');
+    $('total').textContent = o.total_text + ' pièces';
+    $('accounts').innerHTML = o.accounts.map(a =>
+      `<tr><td>${esc(a.label)}</td><td class="addr">${esc(a.address)}</td><td>${esc(a.balance_text)}</td></tr>`).join('');
+    showError(o.node_ok ? null : 'Nœud injoignable : ' + o.node_error + ' (Réglages pour changer de nœud)');
+  } catch (e) { showError(e); }
+}
+
+// Création et restauration
+$('new-btn').onclick = async () => {
+  mode = 'new';
+  try { newPhrase = (await api('/phrase')).phrase; } catch (e) { return showError(e); }
+  $('new-phrase').textContent = newPhrase.split(' ').map((w, i) => `${i + 1}. ${w}`).join('   ');
+  $('new-box').hidden = false; $('restore-box').hidden = true; $('password-box').hidden = false;
+  $('noted').parentElement.hidden = false;
+};
+$('restore-btn').onclick = () => {
+  mode = 'restore';
+  $('new-box').hidden = true; $('restore-box').hidden = false; $('password-box').hidden = false;
+  $('noted').parentElement.hidden = true;
+};
+$('create-btn').onclick = async () => {
+  const p1 = $('new-password').value, p2 = $('new-password2').value;
+  if (p1 !== p2) return showError('Les deux mots de passe ne sont pas identiques.');
+  if (mode === 'new' && !$('noted').checked) return showError('Notez d’abord vos 12 mots, puis cochez la case.');
+  const phrase = mode === 'new' ? newPhrase : $('restore-phrase').value;
+  try { await api('/create', {phrase, password: p1}); showError(null); newPhrase = ''; await refresh(); }
+  catch (e) { showError(e); }
+};
+
+// Verrouillage
+$('unlock-form').onsubmit = async (e) => {
+  e.preventDefault();
+  try { await api('/unlock', {password: $('password').value}); $('password').value = ''; showError(null); await refresh(); }
+  catch (err) { showError(err); }
+};
+$('lock-btn').onclick = async () => { await api('/lock', {}); await refresh(); };
+
+// Onglets
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.removeAttribute('aria-current'));
+  b.setAttribute('aria-current', 'page');
+  document.querySelectorAll('[data-panel]').forEach(p => p.hidden = p.dataset.panel !== b.dataset.tab);
+  if (b.dataset.tab === 'delegate') loadValidators();
+  if (b.dataset.tab === 'accounts') overview();
+});
+
+$('add-account').onsubmit = async (e) => {
+  e.preventDefault();
+  try { await api('/accounts', {label: $('account-label').value}); $('account-label').value = ''; await refresh(); }
+  catch (err) { showError(err); }
+};
+
+// Envoi
+function sendBody() {
+  return {from: Number($('send-from').value), to: $('send-to').value, amount: $('send-amount').value, memo: $('send-memo').value};
+}
+function previewHtml(p) {
+  return `Frais : <b>${esc(p.fee_text)}</b> pièce<br>Total débité : <b>${esc(p.total_text)}</b> pièces<br>Solde après : ${esc(p.remaining_text)} pièces` +
+    (p.warnings.length ? '<br>' + p.warnings.map(w => `<span class="warn">${esc(w)}</span>`).join('<br>') : '');
+}
+$('preview-btn').onclick = async () => {
+  $('send-btn').hidden = true;
+  try {
+    const p = await api('/preview', sendBody());
+    $('send-preview').innerHTML = previewHtml(p); $('send-preview').hidden = false; $('send-btn').hidden = false; showError(null);
+  } catch (e) { $('send-preview').hidden = true; showError(e); }
+};
+for (const id of ['send-from', 'send-to', 'send-amount', 'send-memo']) $(id).oninput = () => { $('send-btn').hidden = true; };
+$('send-btn').onclick = async () => {
+  $('send-btn').disabled = true;
+  try {
+    const r = await api('/send', sendBody());
+    $('send-preview').innerHTML = `<span class="ok">Envoi soumis.</span> Il sera inclus dans un des prochains blocs.<br><span class="addr">${esc(r.id)}</span>`;
+    $('send-btn').hidden = true; $('send-amount').value = ''; $('send-memo').value = '';
+    setTimeout(overview, 15000);
+  } catch (e) { showError(e); }
+  $('send-btn').disabled = false;
+};
+
+// Frappe
+async function minerStatus() {
+  try {
+    const m = await api('/miner');
+    $('mine-status').innerHTML = m.running
+      ? `<span class="ok">En cours</span> sur ${m.threads} cœur(s) · ${m.hashes_per_second.toFixed(1)} calculs/s · difficulté ${m.difficulty ?? '…'} · ${m.found} part(s) trouvée(s), ${m.accepted} acceptée(s)` +
+        (m.last_error ? `<br><span class="warn">${esc(m.last_error)}</span>` : '')
+      : 'Arrêté.';
+  } catch (e) { /* page verrouillée */ }
+}
+$('mine-start').onclick = async () => {
+  try { await api('/miner/start', {account: Number($('mine-account').value), threads: Number($('mine-threads').value)}); minerStatus(); }
+  catch (e) { showError(e); }
+};
+$('mine-stop').onclick = async () => { await api('/miner/stop', {}); minerStatus(); };
+
+// Délégation
+async function loadValidators() {
+  try {
+    const v = await api('/validators');
+    $('del-validator').innerHTML = v.active.map(x =>
+      `<option value="${esc(x.key)}">${esc(x.name)} · commission ${(x.commission_bps / 100).toFixed(1)} % (max ${(x.max_commission_bps / 100).toFixed(1)} %)</option>`).join('');
+  } catch (e) { showError(e); }
+}
+function delBody(submit) { return {from: Number($('del-from').value), validator: $('del-validator').value, amount: $('del-amount').value, submit}; }
+$('del-preview').onclick = async () => {
+  $('del-send').hidden = true;
+  try { const p = await api('/delegate', delBody(false)); $('del-result').innerHTML = previewHtml(p); $('del-result').hidden = false; $('del-send').hidden = false; showError(null); }
+  catch (e) { $('del-result').hidden = true; showError(e); }
+};
+$('del-send').onclick = async () => {
+  try { const r = await api('/delegate', delBody(true)); $('del-result').innerHTML = `<span class="ok">Délégation soumise.</span><br><span class="addr">${esc(r.id)}</span>`; $('del-send').hidden = true; }
+  catch (e) { showError(e); }
+};
+
+// Réglages
+$('node-form').onsubmit = async (e) => {
+  e.preventDefault();
+  try { await api('/node', {node: $('node-addr').value}); await refresh(); } catch (err) { showError(err); }
+};
+$('reveal-form').onsubmit = async (e) => {
+  e.preventDefault();
+  try { const r = await api('/reveal', {password: $('reveal-password').value}); $('reveal-password').value = '';
+    $('reveal-phrase').textContent = r.phrase.split(' ').map((w, i) => `${i + 1}. ${w}`).join('   '); $('reveal-phrase').hidden = false;
+    setTimeout(() => { $('reveal-phrase').hidden = true; $('reveal-phrase').textContent = ''; }, 60000);
+  } catch (err) { showError(err); }
+};
+
+$('mine-threads').value = Math.max(1, (navigator.hardwareConcurrency || 2) - 1);
+refresh();
+setInterval(() => { if (state && state.unlocked) { minerStatus(); } }, 3000);
+setInterval(() => { if (state && state.unlocked && !$('wallet').hidden) overview(); }, 20000);
+</script>
+</body>
+</html>
