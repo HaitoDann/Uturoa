@@ -76,8 +76,12 @@ async fn wait_for(nodes: &[&RunningNode], target: u64, limit: Duration) {
     while nodes.iter().any(|n| height(n) < target) {
         assert!(
             start.elapsed() < limit,
-            "hauteurs bloquées sous {target} : {:?}",
-            nodes.iter().map(|n| height(n)).collect::<Vec<_>>()
+            "hauteurs bloquées sous {target} : {:?} ; pairs connectés : {:?}",
+            nodes.iter().map(|n| height(n)).collect::<Vec<_>>(),
+            nodes
+                .iter()
+                .map(|n| lock(&n.shared).peers)
+                .collect::<Vec<_>>()
         );
         tokio::time::sleep(Duration::from_millis(100)).await;
     }

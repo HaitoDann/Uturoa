@@ -126,6 +126,10 @@ struct Runner {
     queue: VecDeque<Action>,
     future: Vec<NetMessage>,
     own: VecDeque<NetMessage>,
+    /// Nos precommits de la hauteur précédente, rediffusés jusqu'à la décision
+    /// suivante : un validateur qui les aurait manqués peut encore décider,
+    /// sans attendre le rattrapage par blocs.
+    previous: Vec<NetMessage>,
     build: Option<(u32, u64)>,
     start_at: Option<u64>,
     timeouts: mpsc::UnboundedSender<Timeout>,
@@ -163,6 +167,14 @@ impl Runner {
             self.engine.restore(lock_state, last.saturating_add(1));
         }
         self.build = None;
+        // Les precommits de la hauteur qui vient d'être décidée restent
+        // rediffusés pendant la hauteur suivante.
+        self.previous = self
+            .own
+            .iter()
+            .filter(|m| matches!(m, NetMessage::Vote(v) if v.vote.kind == VoteKind::Precommit))
+            .cloned()
+            .collect();
         self.own.clear();
         self.queue.clear();
         self.start_at = Some(
@@ -484,6 +496,7 @@ pub async fn run(
         queue: VecDeque::new(),
         future: Vec::new(),
         own: VecDeque::new(),
+        previous: Vec::new(),
         build: None,
         start_at: None,
         timeouts: timeouts_tx,
@@ -525,7 +538,7 @@ pub async fn run(
             Some(event) = inbound.recv() => r.on_net(event),
             _ = rebroadcast.tick() => {
                 let s = lock(&r.shared);
-                for msg in &r.own {
+                for msg in r.own.iter().chain(r.previous.iter()) {
                     s.broadcast(msg.clone());
                 }
             }
