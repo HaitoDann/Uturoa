@@ -37,7 +37,8 @@ export UTUROA_KEY_PASSWORD=motdepasse
 ./target/release/uturoa-node mine --api 127.0.0.1:8545 --address utu1…
 ```
 
-L'explorateur est sur http://127.0.0.1:8545/.
+L'explorateur est sur http://127.0.0.1:8545/. Guide complet, y compris sur
+plusieurs machines : [`docs/TESTNET-LOCAL.md`](docs/TESTNET-LOCAL.md).
 
 ## Compiler et tester
 

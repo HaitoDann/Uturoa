@@ -70,6 +70,10 @@ uturoa-node send --api 127.0.0.1:8545 --key alice.json --to utu1… --amount 12,
 
 ## 5. Conventions
 
+- **Publication** : le workflow `release.yml` construit les binaires Linux,
+  Windows et macOS et les joint à une release GitHub (GitHub, Releases,
+  Draft, tag `vX.Y.Z` sur `main`, Publish). La version est dans `Cargo.toml`.
+- Guide d'essai : `docs/TESTNET-LOCAL.md`.
 - **Lints stricts** : pas d'`unwrap`, pas d'`expect`, pas de `panic`, pas
   d'arithmétique non vérifiée (`checked_*` ou `saturating_*`), pas
   d'indexation directe dans le code de production. Les tests en sont
