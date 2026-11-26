@@ -166,7 +166,6 @@ async fn write_borsh<T: BorshSerialize, W: futures::AsyncWrite + Unpin + Send>(
     io.close().await
 }
 
-#[async_trait::async_trait]
 impl request_response::Codec for SyncCodec {
     type Protocol = StreamProtocol;
     type Request = SyncRequest;
@@ -304,7 +303,10 @@ pub async fn run(
 
     swarm.behaviour_mut().gossip.subscribe(&topic)?;
     let dial_targets: Vec<Multiaddr> = config.peers.clone();
-    swarm.listen_on(config.listen.clone())?;
+    if let Err(e) = swarm.listen_on(config.listen.clone()) {
+        tracing::error!(listen = %config.listen, "écoute réseau impossible : {e}");
+        return Err(e.into());
+    }
     info!(peer_id = %swarm.local_peer_id(), listen = %config.listen, "réseau démarré");
 
     let mut connected: BTreeSet<PeerId> = BTreeSet::new();
@@ -382,6 +384,12 @@ pub async fn run(
                         connected.insert(peer_id);
                         lock(&shared).peers = connected.len();
                     }
+                }
+                SwarmEvent::ListenerError { error, .. } => {
+                    warn!("erreur d'écoute réseau : {error}");
+                }
+                SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                    debug!(?peer_id, "connexion sortante échouée : {error}");
                 }
                 SwarmEvent::ConnectionClosed { peer_id, num_established: 0, .. } => {
                     info!(%peer_id, "pair déconnecté");

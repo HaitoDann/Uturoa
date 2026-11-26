@@ -27,7 +27,6 @@ clap.workspace = true
 redb.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-async-trait.workspace = true
 blake3.workspace = true
 futures.workspace = true
 libp2p.workspace = true

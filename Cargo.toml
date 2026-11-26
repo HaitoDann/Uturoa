@@ -13,7 +13,7 @@ resolver = "3"
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.87"
 license = "Apache-2.0"
 repository = "https://github.com/HaitoDann/Uturoa"
 
@@ -40,9 +40,8 @@ tempfile = "3"
 thiserror = "2"
 randomx-rs = "1.6"
 clap = { version = "4", features = ["derive"] }
-async-trait = "0.1"
 futures = "0.3"
-libp2p = { version = "0.54", features = ["tokio", "tcp", "noise", "yamux", "gossipsub", "request-response", "macros"] }
+libp2p = { version = "0.57", features = ["tokio", "tcp", "noise", "yamux", "gossipsub", "request-response", "macros"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal", "net"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

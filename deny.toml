@@ -10,12 +10,6 @@ all-features = false
 
 [advisories]
 version = 2
-# Crates non maintenues, sans faille connue, tirées par libp2p : à retirer
-# quand libp2p les remplacera. Toute autre alerte bloque la CI.
-ignore = [
-    { id = "RUSTSEC-2024-0384", reason = "instant, non maintenu, via libp2p ; aucune faille" },
-    { id = "RUSTSEC-2024-0436", reason = "paste, non maintenu, via netlink (libp2p-tcp) ; macro de compilation, aucune faille" },
-]
 
 [licenses]
 version = 2

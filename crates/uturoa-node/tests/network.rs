@@ -34,8 +34,16 @@ async fn wait_for(nodes: &[RunningNode], target: u64, limit: Duration) {
     while nodes.iter().any(|n| height(n) < target) {
         assert!(
             start.elapsed() < limit,
-            "hauteurs bloquées : {:?}",
-            nodes.iter().map(height).collect::<Vec<_>>()
+            "hauteurs bloquées : {:?} ; pairs connectés : {:?} ; tâches arrêtées : {:?}",
+            nodes.iter().map(height).collect::<Vec<_>>(),
+            nodes
+                .iter()
+                .map(|n| lock(&n.shared).peers)
+                .collect::<Vec<_>>(),
+            nodes
+                .iter()
+                .map(|n| n.tasks.iter().filter(|t| t.is_finished()).count())
+                .collect::<Vec<_>>()
         );
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
@@ -56,7 +64,17 @@ async fn four_validators_produce_blocks_mint_and_transfer() {
             .collect(),
         block_interval_ms: Some(200),
     };
-    let base = 42_000 + (std::process::id() % 1_000) as u16 * 4;
+    // Ports réellement libres, choisis par le système : des ports fixes
+    // peuvent tomber dans une plage réservée (fréquent sous Windows).
+    let ports: Vec<u16> = (0..5)
+        .map(|_| {
+            std::net::TcpListener::bind("127.0.0.1:0")
+                .unwrap()
+                .local_addr()
+                .unwrap()
+                .port()
+        })
+        .collect();
     let dirs: Vec<_> = (0..4).map(|i| dir.path().join(format!("d{i}"))).collect();
     let addrs: Vec<String> = dirs
         .iter()
@@ -64,7 +82,7 @@ async fn four_validators_produce_blocks_mint_and_transfer() {
         .map(|(i, d)| {
             format!(
                 "/ip4/127.0.0.1/tcp/{}/p2p/{}",
-                base + i as u16,
+                ports[i],
                 peer_id(d).unwrap()
             )
         })
@@ -76,9 +94,7 @@ async fn four_validators_produce_blocks_mint_and_transfer() {
                     genesis: genesis.clone(),
                     data_dir: dirs[i].clone(),
                     key: Some(kps[i].clone()),
-                    listen: format!("/ip4/127.0.0.1/tcp/{}", base + i as u16)
-                        .parse()
-                        .unwrap(),
+                    listen: format!("/ip4/127.0.0.1/tcp/{}", ports[i]).parse().unwrap(),
                     peers: addrs
                         .iter()
                         .enumerate()
@@ -86,7 +102,7 @@ async fn four_validators_produce_blocks_mint_and_transfer() {
                         .map(|(_, a)| a.parse().unwrap())
                         .collect(),
                     trusted_block: None,
-                    api: (i == 0).then(|| format!("127.0.0.1:{}", base + 100).parse().unwrap()),
+                    api: (i == 0).then(|| format!("127.0.0.1:{}", ports[4]).parse().unwrap()),
                 },
                 Box::new(FakePow),
             )
