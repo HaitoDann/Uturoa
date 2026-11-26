@@ -37,9 +37,20 @@ enum Command {
         /// Intervalle entre deux blocs, en millisecondes (12 000 par défaut).
         #[arg(long)]
         block_interval_ms: Option<u64>,
-        /// Premier port réseau ; le validateur i écoute sur port + i - 1.
+        /// Premier port réseau ; en local, le validateur i écoute sur port + i - 1,
+        /// et avec --hosts, tous écoutent sur ce port.
         #[arg(long, default_value_t = 30_333)]
         base_port: u16,
+        /// Adresses IP des machines, séparées par des virgules : une par
+        /// validateur. Génère aussi un service systemd par machine.
+        #[arg(long, value_delimiter = ',')]
+        hosts: Vec<String>,
+        /// Noms des validateurs, séparés par des virgules.
+        #[arg(long, value_delimiter = ',')]
+        names: Vec<String>,
+        /// Port de l'API sur chaque machine (écoute sur 127.0.0.1), avec --hosts.
+        #[arg(long, default_value_t = 8645)]
+        api_port: u16,
     },
     /// Lance un nœud : validateur avec --key, observateur sans.
     Run {
@@ -116,7 +127,18 @@ fn main() -> Result<()> {
             mint_difficulty,
             block_interval_ms,
             base_port,
+            hosts,
+            names,
+            api_port,
         } => {
+            let validators = if hosts.is_empty() {
+                validators
+            } else {
+                hosts.len()
+            };
+            if !names.is_empty() && names.len() != validators {
+                bail!("--names doit donner un nom par validateur ({validators})");
+            }
             if !(1..=100).contains(&validators) {
                 bail!("entre 1 et 100 validateurs");
             }
@@ -127,10 +149,11 @@ fn main() -> Result<()> {
                 let kp = KeyPair::generate();
                 KeyFile::encrypt(&kp, &pw, DEFAULT_KDF)?
                     .save(&dir.join(format!("validator-{i}.json")))?;
-                entries.push(validator_entry(
-                    &kp.public_key(),
-                    &format!("validateur-{i}"),
-                ));
+                let name = names
+                    .get(i.saturating_sub(1))
+                    .cloned()
+                    .unwrap_or_else(|| format!("validateur-{i}"));
+                entries.push(validator_entry(&kp.public_key(), &name));
             }
             let genesis = GenesisFile {
                 chain_id,
@@ -151,9 +174,42 @@ fn main() -> Result<()> {
             let mut addrs = Vec::with_capacity(validators);
             for i in 1..=validators {
                 let id = uturoa_node::service::peer_id(&dir.join(format!("d{i}")))?;
-                let offset = u16::try_from(i.saturating_sub(1)).unwrap_or(0);
-                let port = base_port.saturating_add(offset);
-                addrs.push((port, format!("/ip4/127.0.0.1/tcp/{port}/p2p/{id}")));
+                if let Some(host) = hosts.get(i.saturating_sub(1)) {
+                    addrs.push((base_port, format!("/ip4/{host}/tcp/{base_port}/p2p/{id}")));
+                } else {
+                    let offset = u16::try_from(i.saturating_sub(1)).unwrap_or(0);
+                    let port = base_port.saturating_add(offset);
+                    addrs.push((port, format!("/ip4/127.0.0.1/tcp/{port}/p2p/{id}")));
+                }
+            }
+            if !hosts.is_empty() {
+                // Un service systemd par machine, à copier dans /etc/systemd/system/.
+                println!();
+                for (i, host) in hosts.iter().enumerate() {
+                    let n = i.saturating_add(1);
+                    let peers: String = addrs
+                        .iter()
+                        .enumerate()
+                        .filter(|(j, _)| *j != i)
+                        .map(|(_, (_, a))| format!(" --peer {a}"))
+                        .collect();
+                    let name = names
+                        .get(i)
+                        .cloned()
+                        .unwrap_or_else(|| format!("validateur-{n}"));
+                    let unit = format!(
+                        "[Unit]\nDescription=Validateur Uturoa {name}\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nWorkingDirectory=/opt/uturoa\nEnvironmentFile=/etc/uturoa/env\nExecStart=/opt/uturoa/uturoa-node run --genesis /opt/uturoa/genesis.json --key /opt/uturoa/validator.json --data-dir /var/lib/uturoa --listen /ip4/0.0.0.0/tcp/{base_port} --api 127.0.0.1:{api_port}{peers}\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=multi-user.target\n"
+                    );
+                    let unit_path = dir.join(format!("uturoa-{n}.service"));
+                    std::fs::write(&unit_path, unit)?;
+                    println!(
+                        "  {name} ({host}) : validator-{n}.json, d{n}/network.key, {}",
+                        unit_path.display()
+                    );
+                }
+                println!();
+                println!("Voir docs/DEPLOYER-PROXMOX.md pour l'installation sur chaque machine.");
+                return Ok(());
             }
             println!();
             println!("Pour lancer le validateur i (un terminal chacun) :");
