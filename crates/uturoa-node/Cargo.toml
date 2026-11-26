@@ -27,6 +27,16 @@ clap.workspace = true
 redb.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+async-trait.workspace = true
+blake3.workspace = true
+futures.workspace = true
+libp2p.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+axum.workspace = true
+tower.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+http-body-util.workspace = true

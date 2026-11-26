@@ -27,14 +27,14 @@ pub struct Chain {
     genesis_hash: Hash,
     genesis_time_ms: u64,
     last_header: Option<BlockHeader>,
-    pow: Box<dyn PowHasher>,
+    pow: Box<dyn PowHasher + Send>,
     snapshot_interval: u64,
 }
 
 impl Chain {
     /// Ouvre la chaîne : dernier instantané (ou genèse), puis rejoue les blocs
     /// enregistrés après lui.
-    pub fn open(dir: &Path, genesis: &GenesisFile, pow: Box<dyn PowHasher>) -> Result<Self> {
+    pub fn open(dir: &Path, genesis: &GenesisFile, pow: Box<dyn PowHasher + Send>) -> Result<Self> {
         let store = Store::open(dir)?;
         let genesis_state = genesis.state()?;
         let state = match store.latest_snapshot()? {
@@ -72,6 +72,17 @@ impl Chain {
     /// Intervalle entre deux instantanés (tests et réglages).
     pub fn set_snapshot_interval(&mut self, blocks: u64) {
         self.snapshot_interval = blocks.max(1);
+    }
+
+    pub fn pow(&self) -> &dyn PowHasher {
+        self.pow.as_ref()
+    }
+
+    /// Horodatage du dernier bloc validé (celui de la genèse au départ).
+    pub fn parent_time_ms(&self) -> u64 {
+        self.last_header
+            .as_ref()
+            .map_or(self.genesis_time_ms, |h| h.timestamp)
     }
 
     pub fn state(&self) -> &State {
@@ -222,6 +233,62 @@ impl Chain {
             bail!("ensemble de validateurs suivant incorrect");
         }
         Ok(next)
+    }
+
+    /// Dernier instantané enregistré : bloc, certificat et état encodé.
+    pub fn snapshot(&self) -> Result<Option<(Block, CommitCertificate, Vec<u8>)>> {
+        let Some((height, bytes)) = self.store.latest_snapshot_raw()? else {
+            return Ok(None);
+        };
+        match (self.store.block(height)?, self.store.commit(height)?) {
+            (Some(b), Some(c)) => Ok(Some((b, c, bytes))),
+            _ => Ok(None),
+        }
+    }
+
+    /// Installe un instantané reçu d'un pair. Il n'est accepté que si son
+    /// certificat est signé par l'ensemble de validateurs **connu** à cette
+    /// hauteur (celui de l'amorçage tant qu'il n'a pas changé), ou si
+    /// l'empreinte du bloc a été fournie par l'opérateur (`trusted`).
+    pub fn install_snapshot(
+        &mut self,
+        block: Block,
+        commit: CommitCertificate,
+        state_bytes: &[u8],
+        trusted: Option<Hash>,
+    ) -> Result<()> {
+        let h = block.header.height;
+        if h <= self.state.height {
+            bail!("instantané plus ancien que notre chaîne");
+        }
+        if commit.height != h || commit.block_hash != block.hash() {
+            bail!("certificat d'un autre bloc");
+        }
+        let state: State =
+            uturoa_core::decode(state_bytes).map_err(|_| anyhow!("état illisible"))?;
+        if state.height != h || state.chain_id != self.state.chain_id {
+            bail!("état d'une autre hauteur ou d'une autre chaîne");
+        }
+        if state.state_root() != block.header.state_root {
+            bail!("l'état ne correspond pas à la racine du bloc");
+        }
+        let vouched = trusted == Some(block.hash());
+        if !vouched {
+            // L'ensemble qui a signé le bloc `h` est celui que l'état d'avant
+            // annonçait ; on le lit dans l'historique de l'état reçu et on
+            // exige qu'il soit identique à notre ensemble actuel.
+            let signers = state.staking().set_at(h);
+            if signers != self.next_validators() {
+                bail!("ensemble de validateurs inconnu : fournir --trusted-block");
+            }
+            commit
+                .verify(&self.state.chain_id, &signers)
+                .map_err(|e| anyhow!("certificat invalide : {e}"))?;
+        }
+        self.store.install_snapshot(&block, &commit, &state)?;
+        self.state = state;
+        self.last_header = Some(block.header);
+        Ok(())
     }
 
     /// Valide définitivement un bloc, avec le certificat qui le prouve.

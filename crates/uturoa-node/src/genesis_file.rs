@@ -18,6 +18,10 @@ pub struct GenesisFile {
     pub mint_difficulty: u64,
     /// Validateurs d'amorçage de la phase 1.
     pub validators: Vec<GenesisValidator>,
+    /// Intervalle minimal entre deux blocs, pour un réseau local accéléré.
+    /// Absent : 12 s. L'émission reste comptée en blocs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub block_interval_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,9 +71,13 @@ impl GenesisFile {
             };
             bootstrap.push((operator, key, info));
         }
+        let mut params = Params::default();
+        if let Some(ms) = self.block_interval_ms {
+            params.min_block_interval_ms = ms;
+        }
         Ok(State::genesis_with_validators(
             self.chain_id.clone(),
-            Params::default(),
+            params,
             self.mint_difficulty,
             bootstrap,
         ))

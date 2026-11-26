@@ -2,11 +2,12 @@
 //!
 //! [`RandomXHasher`] implémente [`PowHasher`] en mode léger (256 Mo de
 //! mémoire) : c'est ce qu'utilisent les validateurs pour vérifier les parts.
+//! Il est partageable entre fils d'exécution.
 //! La clé RandomX change tous les `SEED_PERIOD` blocs ; la machine virtuelle
 //! est reconstruite à chaque changement de clé (environ une demi-seconde).
 
 use randomx_rs::{RandomXCache, RandomXFlag, RandomXVM};
-use std::sync::Mutex;
+use std::sync::{Mutex, mpsc};
 use uturoa_core::{Hash, MintShare};
 use uturoa_state::{PowHasher, meets_target};
 
@@ -14,9 +15,17 @@ use uturoa_state::{PowHasher, meets_target};
 /// difficulté supérieure à 1, donc la part est refusée plutôt qu'acceptée à tort.
 const FAILURE: Hash = [0xFF; 32];
 
+struct Job {
+    seed: Hash,
+    input: Vec<u8>,
+    reply: mpsc::Sender<Option<Hash>>,
+}
+
+/// RandomX en mode léger. La machine virtuelle RandomX ne peut pas changer de
+/// fil d'exécution : elle vit dans un fil dédié, qui reçoit les calculs par
+/// message. `RandomXHasher` peut donc être partagé entre fils.
 pub struct RandomXHasher {
-    flags: RandomXFlag,
-    vm: Mutex<Option<(Hash, RandomXVM)>>,
+    jobs: Mutex<mpsc::Sender<Job>>,
 }
 
 impl Default for RandomXHasher {
@@ -25,30 +34,51 @@ impl Default for RandomXHasher {
     }
 }
 
+fn compute(
+    flags: RandomXFlag,
+    vm: &mut Option<(Hash, RandomXVM)>,
+    seed: &Hash,
+    input: &[u8],
+) -> Option<Hash> {
+    if vm.as_ref().is_none_or(|(s, _)| s != seed) {
+        let cache = RandomXCache::new(flags, seed).ok()?;
+        *vm = Some((*seed, RandomXVM::new(flags, Some(cache), None).ok()?));
+    }
+    let (_, machine) = vm.as_ref()?;
+    machine.calculate_hash(input).ok()?.try_into().ok()
+}
+
 impl RandomXHasher {
     pub fn new() -> Self {
+        let (tx, rx) = mpsc::channel::<Job>();
+        std::thread::spawn(move || {
+            let flags = RandomXFlag::get_recommended_flags();
+            let mut vm: Option<(Hash, RandomXVM)> = None;
+            // Le fil s'arrête quand le dernier émetteur disparaît.
+            while let Ok(job) = rx.recv() {
+                let out = compute(flags, &mut vm, &job.seed, &job.input);
+                let _ = job.reply.send(out);
+            }
+        });
         Self {
-            flags: RandomXFlag::get_recommended_flags(),
-            vm: Mutex::new(None),
+            jobs: Mutex::new(tx),
         }
-    }
-
-    fn compute(&self, seed: &Hash, input: &[u8]) -> Option<Hash> {
-        let mut guard = self.vm.lock().ok()?;
-        if guard.as_ref().is_none_or(|(s, _)| s != seed) {
-            let cache = RandomXCache::new(self.flags, seed).ok()?;
-            let vm = RandomXVM::new(self.flags, Some(cache), None).ok()?;
-            *guard = Some((*seed, vm));
-        }
-        let (_, vm) = guard.as_ref()?;
-        let out = vm.calculate_hash(input).ok()?;
-        out.try_into().ok()
     }
 }
 
 impl PowHasher for RandomXHasher {
     fn hash(&self, seed: &Hash, input: &[u8]) -> Hash {
-        self.compute(seed, input).unwrap_or(FAILURE)
+        let (reply, answer) = mpsc::channel();
+        let job = Job {
+            seed: *seed,
+            input: input.to_vec(),
+            reply,
+        };
+        let sent = self.jobs.lock().ok().is_some_and(|tx| tx.send(job).is_ok());
+        if !sent {
+            return FAILURE;
+        }
+        answer.recv().ok().flatten().unwrap_or(FAILURE)
     }
 }
 

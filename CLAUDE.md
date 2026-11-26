@@ -45,7 +45,7 @@ Monnaie minimaliste en Rust : une seule fonction, envoyer de la valeur.
 | `uturoa-state` | Machine d'état : comptes, réserve, envois, multisignatures, frais dynamiques, melt, frappe (parts, partage, difficulté ; RandomX abstrait par `PowHasher`), forge (partagée par `staking`) |
 | `uturoa-state::staking` | Validateurs, délégation, présence (certificat du bloc précédent), mise à l'écart, restitution, double signature, récompenses par époque, signal de mise à jour, bascule |
 | `uturoa-pow` | RandomX (crate `randomx-rs`, C++ : il faut CMake et un compilateur C++) : vérification en mode léger et minage |
-| `uturoa-node` | Nœud : fichier de genèse JSON, stockage redb (blocs, certificats, instantanés tous les 1 000 blocs), chaîne (construction, vérification complète, validation définitive, rejeu au redémarrage), commandes `devnet` et `info` |
+| `uturoa-node` | Nœud : genèse JSON, stockage redb (blocs, certificats, instantanés, garde et verrou de consensus), chaîne, mempool, réseau libp2p **ouvert** (gossip, rattrapage, instantané), boucle de consensus, soumission automatique des preuves d'équivoque ; commandes `devnet`, `run`, `info` |
 | `uturoa-keystore` | Fichiers de clés chiffrés ; mot de passe par `UTUROA_KEY_PASSWORD` ou fichier |
 
 ## 4. Commandes
@@ -59,7 +59,8 @@ cargo test -q --release -p uturoa-state --test mint -- --ignored   # parcourt to
 
 # Réseau local
 export UTUROA_KEY_PASSWORD=pw
-uturoa-node devnet --dir net
+uturoa-node devnet --dir net --block-interval-ms 1000   # affiche les 4 commandes run
+uturoa-node run --genesis net/genesis.json --key net/validator-1.json --data-dir net/d1 --listen /ip4/127.0.0.1/tcp/30333 --peer …
 uturoa-node info --genesis net/genesis.json --data-dir net/d1
 ```
 
@@ -86,6 +87,13 @@ uturoa-node info --genesis net/genesis.json --data-dir net/d1
   la même adresse.
 - Pour tester la bascule sans 1 314 000 blocs, les tests raccourcissent la
   phase 1 avec `set_phase_end_for_tests` (jamais utilisé par le protocole).
+- RandomX ne peut pas changer de fil d'exécution : `RandomXHasher` le fait
+  tourner dans un fil dédié et lui envoie les calculs par message (pas de
+  code `unsafe`).
+- Instantané d'un pair : accepté s'il est signé par l'ensemble de validateurs
+  qu'on connaît déjà, ou si l'opérateur fournit l'empreinte du bloc
+  (`--trusted-block`). Après la bascule, un nouveau nœud a donc besoin d'une
+  empreinte de confiance.
 - Si RandomX échoue localement, `RandomXHasher` renvoie une empreinte qui ne
   satisfait aucune cible : le nœud refuse la part (risque de blocage, jamais
   d'acceptation à tort).
@@ -100,7 +108,7 @@ uturoa-node info --genesis net/genesis.json --data-dir net/d1
 | 3 | Frappe RandomX : `MintShare`, partage par période, difficulté | fait |
 | 4 | Preuve d'enjeu : délégation, sélection, plafond de vote, sanctions, bascule | fait |
 | 5a | Nœud : genèse, stockage, chaîne, `devnet` | fait |
-| 5b | Nœud : réseau libp2p, boucle de consensus, mempool, preuves d'équivoque soumises d'office | à faire |
+| 5b | Nœud : réseau libp2p, boucle de consensus, mempool, preuves d'équivoque soumises d'office | fait |
 | 5c | Nœud : API, synchronisation par instantané, explorateur | à faire |
 | 6 | Portefeuilles (bureau avec mineur intégré, mobile) | à faire |
 | 7 | Testnet public, fuzzing, essais de panne, répétition complète frappe → bascule | à faire |

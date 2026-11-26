@@ -132,6 +132,42 @@ impl MintState {
         self.seen.retain(|h, _| *h >= oldest_anchor);
     }
 
+    /// Vérifications sans preuve de travail ni écriture : chaîne, ancrage,
+    /// unicité. Sert au mempool, avant d'inclure une part dans un bloc.
+    /// `parent_hash` est l'empreinte du bloc `height - 1`, que l'état
+    /// n'enregistre qu'en appliquant le bloc `height`.
+    pub fn precheck(
+        &self,
+        chain_id: &str,
+        height: u64,
+        parent_hash: &Hash,
+        share: &MintShare,
+    ) -> Result<(), ShareError> {
+        if share.chain_id != chain_id {
+            return Err(ShareError::WrongChain);
+        }
+        let oldest = height.saturating_sub(MINT_ANCHOR_WINDOW);
+        if share.anchor_height >= height || share.anchor_height < oldest {
+            return Err(ShareError::BadAnchor);
+        }
+        let known = if share.anchor_height == height.saturating_sub(1) {
+            Some(parent_hash)
+        } else {
+            self.block_hashes.get(&share.anchor_height)
+        };
+        if known != Some(&share.anchor_hash) {
+            return Err(ShareError::BadAnchor);
+        }
+        if self
+            .seen
+            .get(&share.anchor_height)
+            .is_some_and(|s| s.contains(&share.id()))
+        {
+            return Err(ShareError::Duplicate);
+        }
+        Ok(())
+    }
+
     /// Vérifie et compte une part pour le bloc `height`.
     pub(crate) fn accept(
         &mut self,

@@ -17,6 +17,13 @@ pub fn hash_to_hex(hash: &Hash) -> String {
     hex::encode(hash)
 }
 
+pub fn hash_from_hex(s: &str) -> Result<Hash> {
+    let bytes = hex::decode(s.trim()).context("empreinte : hexadécimal invalide")?;
+    bytes
+        .try_into()
+        .map_err(|_| anyhow!("une empreinte fait 32 octets"))
+}
+
 /// Montant en unités, encodé en chaîne : les entiers de plus de 2⁵³ perdent
 /// leur précision en JavaScript.
 pub fn amount_to_string(amount: u64) -> String {
