@@ -9,6 +9,8 @@ pub struct Params {
     /// Nombre maximal de parts de frappe par bloc (SPEC §5) : chaque part coûte une vérification RandomX.
     pub max_block_shares: u64,
     pub max_block_bytes: u64,
+    /// Nombre maximal de validateurs actifs après la bascule (SPEC §4.4).
+    pub max_active_validators: u64,
     pub timeout_propose_ms: u64,
     pub timeout_propose_delta_ms: u64,
     pub timeout_vote_ms: u64,
@@ -23,6 +25,7 @@ impl Default for Params {
             max_block_txs: 5_000,
             max_block_shares: 100,
             max_block_bytes: 4 * 1024 * 1024,
+            max_active_validators: 21,
             timeout_propose_ms: 3_000,
             timeout_propose_delta_ms: 1_000,
             timeout_vote_ms: 1_000,

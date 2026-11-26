@@ -2,12 +2,14 @@
 
 use crate::fees::{next_base_fee, split_fee};
 use crate::mint::{INITIAL_MINT_DIFFICULTY, MINT_PERIOD, MintState, PowHasher, ShareError};
+use crate::staking::{EPOCH_BLOCKS, StakeDebit, Staking};
 use std::collections::BTreeMap;
 use thiserror::Error;
 use uturoa_core::{
-    Account, Address, Amount, Authorization, CoreError, Hash, MAX_BATCH_PAYMENTS, MAX_SUPPLY,
-    MIN_BASE_FEE_PER_BYTE, MIN_RESERVE, MINT_PER_BLOCK, MINT_PHASE_BLOCKS, MintShare, Params,
-    SignedTransaction, TxBody, encode, forge_amount,
+    Account, Address, Amount, Authorization, CommitCertificate, CoreError, Hash,
+    MAX_BATCH_PAYMENTS, MAX_SUPPLY, MIN_BASE_FEE_PER_BYTE, MIN_RESERVE, MINT_PER_BLOCK,
+    MINT_PHASE_BLOCKS, MintShare, Params, PublicKey, SignedTransaction, TxBody, ValidatorInfo,
+    encode, forge_amount,
 };
 use uturoa_crypto::{Domain, hash_tagged, merkle_root};
 
@@ -32,8 +34,6 @@ pub enum TxError {
     Malformed(&'static str),
     #[error("dépassement arithmétique")]
     Overflow,
-    #[error("transaction pas encore prise en charge")]
-    NotYetSupported,
 }
 
 /// Raison du refus d'un bloc.
@@ -45,6 +45,10 @@ pub enum BlockError {
     InvalidTx { index: usize, error: TxError },
     #[error("part de frappe {index} invalide : {error}")]
     InvalidShare { index: usize, error: ShareError },
+    #[error("certificat du bloc précédent : {0}")]
+    BadCommit(&'static str),
+    #[error("erreur interne : {0}")]
+    Internal(&'static str),
     #[error("invariant de l'offre violé")]
     Invariant,
 }
@@ -57,6 +61,8 @@ pub struct BlockInput<'a> {
     pub txs: &'a [SignedTransaction],
     pub shares: &'a [MintShare],
     pub proposer: &'a Address,
+    /// Certificat du bloc `height - 1` (absent au bloc 1).
+    pub last_commit: Option<&'a CommitCertificate>,
     /// Taille encodée du bloc, pour le frais de base suivant.
     pub block_bytes: u64,
 }
@@ -77,22 +83,30 @@ pub struct State {
     /// Hauteur du dernier bloc appliqué (0 : genèse).
     pub height: u64,
     pub params: Params,
-    accounts: BTreeMap<Address, Account>,
+    pub(crate) accounts: BTreeMap<Address, Account>,
     /// Offre en circulation : émise moins fondue. Jamais plus que `MAX_SUPPLY`.
-    supply: Amount,
-    /// Unités forgées, en attente de partage entre validateurs (lot 4).
-    pending_rewards: Amount,
+    pub(crate) supply: Amount,
+    /// Unités forgées, partagées à chaque fin d'époque.
+    pub(crate) pending_rewards: Amount,
     /// Frappe de la phase 1.
-    mint: MintState,
+    pub(crate) mint: MintState,
+    /// Validateurs et délégations.
+    pub(crate) staking: Staking,
+    /// Dernier bloc de la phase 1 ; la preuve d'enjeu commence au suivant.
+    pub(crate) phase_end: u64,
     /// Frais de base par octet pour le prochain bloc.
-    base_fee_per_byte: Amount,
+    pub(crate) base_fee_per_byte: Amount,
 }
 
 /// Unités émises par le bloc `height`, `supply` étant l'offre avant le bloc :
 /// la frappe pendant la phase 1, la forge ensuite. Jamais au-delà du plafond.
 pub fn block_issuance(height: u64, supply: Amount) -> Amount {
+    issuance(height, supply, MINT_PHASE_BLOCKS)
+}
+
+fn issuance(height: u64, supply: Amount, phase_end: u64) -> Amount {
     let room = MAX_SUPPLY.saturating_sub(supply);
-    let amount = if height <= MINT_PHASE_BLOCKS {
+    let amount = if height <= phase_end {
         MINT_PER_BLOCK
     } else {
         forge_amount(supply)
@@ -112,7 +126,17 @@ impl State {
         params: Params,
         difficulty: u64,
     ) -> Self {
-        Self {
+        Self::genesis_with_validators(chain_id, params, difficulty, Vec::new())
+    }
+
+    /// Genèse complète : difficulté de frappe et validateurs d'amorçage.
+    pub fn genesis_with_validators(
+        chain_id: impl Into<String>,
+        params: Params,
+        difficulty: u64,
+        bootstrap: Vec<(Address, PublicKey, ValidatorInfo)>,
+    ) -> Self {
+        let mut state = Self {
             chain_id: chain_id.into(),
             protocol_version: 1,
             height: 0,
@@ -121,8 +145,28 @@ impl State {
             supply: 0,
             pending_rewards: 0,
             mint: MintState::new(difficulty),
+            staking: Staking::default(),
+            phase_end: MINT_PHASE_BLOCKS,
             base_fee_per_byte: MIN_BASE_FEE_PER_BYTE,
-        }
+        };
+        state.add_bootstrap(bootstrap);
+        state
+    }
+
+    /// Raccourcit la phase 1, pour tester la bascule sans 1 314 000 blocs.
+    /// Jamais utilisé par le protocole.
+    #[doc(hidden)]
+    pub fn set_phase_end_for_tests(&mut self, phase_end: u64) {
+        self.phase_end = phase_end;
+    }
+
+    pub fn staking(&self) -> &Staking {
+        &self.staking
+    }
+
+    /// Clés des validateurs du prochain bloc, dans l'ordre du consensus.
+    pub fn next_validators(&self) -> Vec<PublicKey> {
+        self.staking.set_at(self.height.saturating_add(1))
     }
 
     pub fn account(&self, address: &Address) -> Option<&Account> {
@@ -164,6 +208,7 @@ impl State {
         balances
             .and_then(|b| b.checked_add(self.pending_rewards))
             .and_then(|b| b.checked_add(self.mint.pot))
+            .and_then(|b| b.checked_add(self.locked_stake()?))
             == Some(self.supply)
             && self.supply <= MAX_SUPPLY
     }
@@ -184,6 +229,8 @@ impl State {
             self.pending_rewards,
             self.base_fee_per_byte,
             &self.mint,
+            &self.staking,
+            self.phase_end,
             merkle_root(&leaves),
         );
         hash_tagged(Domain::State, &encode(&globals))
@@ -205,19 +252,21 @@ impl State {
         }
         let mut next = self.clone();
         next.mint.record_parent(height, block.parent_hash);
+        next.record_commit(height, &block.parent_hash, block.last_commit)
+            .map_err(BlockError::BadCommit)?;
         for (index, stx) in block.txs.iter().enumerate() {
-            next.apply_tx(stx, block.proposer)
+            next.apply_tx_unchecked(stx, block.proposer)
                 .map_err(|error| BlockError::InvalidTx { index, error })?;
         }
         next.apply_shares(height, block.shares, pow)?;
 
         // Émission : frappe (au pot) pendant la phase 1, forge ensuite.
-        let issued = block_issuance(height, next.supply);
+        let issued = issuance(height, next.supply, next.phase_end);
         next.supply = next
             .supply
             .checked_add(issued)
             .ok_or(BlockError::Invariant)?;
-        if height <= MINT_PHASE_BLOCKS {
+        if height <= next.phase_end {
             next.mint.pot = next
                 .mint
                 .pot
@@ -229,7 +278,7 @@ impl State {
                     a.balance = a.balance.checked_add(amount).ok_or(BlockError::Invariant)?;
                 }
             }
-            if height == MINT_PHASE_BLOCKS {
+            if height == next.phase_end {
                 // Ce qui n'a pas été partagé retourne au réservoir.
                 next.supply = next
                     .supply
@@ -243,6 +292,16 @@ impl State {
                 .checked_add(issued)
                 .ok_or(BlockError::Invariant)?;
         }
+
+        // Preuve d'enjeu : restitutions, absences, époque, ensemble suivant.
+        next.release_unbonding(height)
+            .map_err(BlockError::Internal)?;
+        next.jail_absent(height);
+        if height.checked_rem(EPOCH_BLOCKS) == Some(0) {
+            next.close_epoch(height).map_err(BlockError::Internal)?;
+        }
+        let (phase_end, max_active) = (next.phase_end, next.params.max_active_validators);
+        next.staking.rotate(height, phase_end, max_active);
 
         next.base_fee_per_byte = next_base_fee(
             next.base_fee_per_byte,
@@ -267,7 +326,7 @@ impl State {
             return Ok(());
         }
         let refuse = |error| Err(BlockError::InvalidShare { index: 0, error });
-        if height > MINT_PHASE_BLOCKS {
+        if height > self.phase_end {
             return refuse(ShareError::PhaseOver);
         }
         if u64::try_from(shares.len()).unwrap_or(u64::MAX) > self.params.max_block_shares {
@@ -281,8 +340,23 @@ impl State {
         Ok(())
     }
 
-    /// Applique une transaction. En cas d'erreur, l'état ne change pas.
+    /// Applique une transaction, comme dans le prochain bloc. En cas
+    /// d'erreur, l'état ne change pas.
     pub fn apply_tx(&mut self, stx: &SignedTransaction, proposer: &Address) -> Result<(), TxError> {
+        let mut next = self.clone();
+        next.apply_tx_unchecked(stx, proposer)?;
+        *self = next;
+        Ok(())
+    }
+
+    /// Applique une transaction sans garantie d'atomicité : réservé à
+    /// `apply_block`, qui abandonne tout l'état en cas d'erreur.
+    fn apply_tx_unchecked(
+        &mut self,
+        stx: &SignedTransaction,
+        proposer: &Address,
+    ) -> Result<(), TxError> {
+        let height = self.height.saturating_add(1);
         let tx = &stx.tx;
         if tx.chain_id != self.chain_id {
             return Err(TxError::WrongChain);
@@ -345,7 +419,11 @@ impl State {
             | TxBody::Unjail
             | TxBody::Leave
             | TxBody::ReportEquivocation { .. }
-            | TxBody::SignalUpgrade { .. } => return Err(TxError::NotYetSupported),
+            | TxBody::SignalUpgrade { .. } => {
+                if let StakeDebit::Amount(a) = self.staking_tx(&tx.sender, height, &tx.body)? {
+                    debit = debit.checked_add(a).ok_or(TxError::Overflow)?;
+                }
+            }
         }
 
         // Solde de l'émetteur.
@@ -375,8 +453,14 @@ impl State {
         let (melt, to_proposer) = split_fee(tx.fee);
         let supply = self.supply.checked_sub(melt).ok_or(TxError::Overflow)?;
 
-        // Écriture.
-        sender.balance = remaining;
+        // Écriture. Une transaction de validation a pu créditer l'émetteur
+        // (récompense de preuve) : on repart de son compte à jour.
+        if let Some(current) = self.accounts.get(&tx.sender) {
+            let gained = current.balance.saturating_sub(sender.balance);
+            sender.balance = remaining.checked_add(gained).ok_or(TxError::Overflow)?;
+        } else {
+            sender.balance = remaining;
+        }
         sender.nonce = expected;
         if let Some(key) = new_key {
             sender.key = Some(key);

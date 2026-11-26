@@ -32,6 +32,7 @@ fn apply(s: &mut State, height: u64, shares: &[MintShare]) -> Result<(), BlockEr
             txs: &[],
             shares,
             proposer: &proposer,
+            last_commit: None,
             block_bytes: 0,
         },
         &FakePow,

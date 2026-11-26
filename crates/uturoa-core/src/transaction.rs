@@ -41,7 +41,7 @@ pub enum TxBody {
         validator: PublicKey,
         amount: Amount,
     } = 0x04,
-    /// Retire `amount` de la délégation ; restitué après le délai de SPEC §4.3.
+    /// Retire `amount` de la délégation ; restitué après 21 jours (SPEC §4.4).
     Undelegate {
         validator: PublicKey,
         amount: Amount,

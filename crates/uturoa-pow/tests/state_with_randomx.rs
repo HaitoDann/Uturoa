@@ -24,6 +24,7 @@ fn real_randomx_share_is_accepted_and_paid() {
                 txs: &[],
                 shares,
                 proposer: &proposer,
+                last_commit: None,
                 block_bytes: 0,
             },
             &pow,

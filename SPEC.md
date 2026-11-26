@@ -60,35 +60,73 @@ frappe), `utu/commit` (certificat du bloc précédent).
   parts de frappe. `tx_root` est la racine de Merkle des identifiants des
   transactions puis des parts, dans l'ordre du bloc.
 
-### 4.1 Phase 1 : preuve d'autorité
+### 4.1 Vote à poids égal
 
-- 4 à 7 validateurs d'amorçage, fixés dans la genèse, à poids égal.
-- Les validateurs d'amorçage ne reçoivent aucune unité en plus de la frappe
-  accessible à tous.
+Le moteur de consensus compte les votes **à poids égal** : chaque validateur
+actif pèse `1 / n`, et le quorum est `⌊2n/3⌋ + 1` validateurs. Le stake sert
+à **sélectionner** les validateurs et à **partager** les récompenses, pas à
+pondérer le vote. Avec au moins 10 validateurs actifs, aucun ne pèse plus de
+10 % du vote.
 
-### 4.2 Bascule
+Tout changement d'ensemble décidé au bloc `h` prend effet au bloc `h + 2`.
 
-- À la fin de la phase de frappe : hauteur 1 314 000 (6 mois de blocs de
-  12 s).
-- La bascule ne change que la règle de sélection des validateurs. Le moteur de
-  consensus reste le même.
-- Si la répartition du stake est jugée trop concentrée à l'approche de la
-  bascule, une version de protocole publiée avant la hauteur prévue repousse
-  la bascule et prolonge la frappe, par tranches d'un mois.
+### 4.2 Phase 1 : preuve d'autorité
 
-### 4.3 Phase 2 : preuve d'enjeu
+- 4 à 7 validateurs d'amorçage, fixés dans la genèse.
+- Ils ne reçoivent aucune unité en plus de la frappe accessible à tous.
+- Pas de mise à l'écart pour absence pendant la phase 1.
+- Inscriptions et délégations sont déjà possibles, pour préparer la bascule.
 
-- Validateurs actifs : les mieux classés par stake. 21 au départ, jusqu'à 100.
-- Délégation ouverte à tous.
-- Plafond de pouvoir de vote : aucun validateur ne pèse plus de 10 % du
-  total. Le stake au-delà ne compte pas dans le vote.
-- Sanctions :
-  - absent de `last_commit` pendant 1 000 blocs d'affilée : mis à l'écart,
-    retiré à `H + 2` ;
-  - double signature prouvée : caution confisquée à 100 %, exclusion
-    définitive. Les unités confisquées sont fondues (§6).
-- Restitution du stake après un délai de 21 jours, pendant lequel une preuve
-  de double signature reste recevable.
+### 4.3 Bascule
+
+- Le bloc 1 314 001 (après la fin de la frappe) est le premier validé par
+  l'ensemble à stake. La bascule ne change que la règle de sélection des
+  validateurs.
+- S'il y a moins de 4 candidats éligibles, les validateurs d'amorçage restent
+  en place jusqu'à ce qu'il y en ait assez.
+- Si la répartition du stake est jugée trop concentrée, une version de
+  protocole publiée avant la hauteur prévue peut repousser la bascule.
+
+### 4.4 Phase 2 : preuve d'enjeu
+
+**Sélection** : à chaque fin d'époque (et après une sortie de l'ensemble),
+les candidats dont le stake propre atteint **10 000 pièces** sont classés par
+stake total (propre + délégué) ; les **21** premiers (paramètre, jusqu'à 100)
+forment l'ensemble actif.
+
+**Validateurs** :
+- inscription (`RegisterValidator`) : clé de consensus unique, fiche
+  (nom de 1 à 64 octets, site et contact de 128 octets au plus), commission ;
+- **commission** : 10 % au plus, modifiable d'1 point au plus, une fois par
+  époque ;
+- **départ** (`Leave`) : définitif ; tout le stake délégué au validateur part
+  en restitution.
+
+**Délégation** : n'importe qui délègue à un validateur inscrit (`Delegate`).
+`Undelegate` met le montant en **restitution pendant 21 jours** (151 200
+blocs) ; il est crédité automatiquement à l'échéance.
+
+**Présence** : un validateur n'est **attendu** que pour les blocs où il fait
+partie de l'ensemble actif. Chaque bloc `h` porte le certificat du bloc
+`h − 1`, vérifié contre l'ensemble de `h − 1` (quorum et signatures) ; chaque
+validateur de cet ensemble est compté attendu, et signataire s'il figure dans
+le certificat.
+
+**Mise à l'écart** : 1 000 blocs attendus d'affilée sans signature, en
+phase 2 : le validateur est mis à l'écart (retiré à `h + 2`), sauf si
+l'ensemble tomberait sous 4 validateurs. `Unjail` est possible après une
+époque, avec un stake propre d'au moins 10 000 pièces.
+
+**Double signature** (`ReportEquivocation`, preuve vérifiée par la clé seule,
+contre l'ensemble de la hauteur de la faute, jusqu'à 21 jours après) :
+- stake propre confisqué à 100 %, y compris ce qui est en restitution ;
+- 10 % à celui qui apporte la preuve, 90 % fondus ;
+- exclusion définitive ; les délégations des autres partent en restitution ;
+- une même preuve n'est sanctionnée qu'une fois.
+
+**Mise à jour du protocole** : à chaque fin d'époque, si plus des 2/3 des
+validateurs actifs ont signalé (`SignalUpgrade`) la version suivante, elle
+devient la version en vigueur.
 
 ## 5. Phase 1 : la frappe
 
@@ -137,10 +175,16 @@ melt      = 80 % des frais + unités confisquées → retour au réservoir
 proposeur = 20 % des frais
 ```
 
-- La forge du bloc est partagée entre les validateurs actifs et leurs
-  délégants, au prorata du stake, après la commission du validateur.
-- Un validateur absent sur l'époque ne reçoit pas sa part. Sa part non versée
-  reste dans le réservoir.
+- La forge s'accumule pendant une **époque** (7 200 blocs, un jour). À la fin
+  de l'époque, elle est partagée entre les validateurs **éligibles** :
+  candidats, jamais mis à l'écart pendant l'époque, stake propre d'au moins
+  10 000 pièces, et **au moins 97 % de signatures** sur les blocs où ils
+  étaient attendus.
+- Part d'un validateur : au prorata de son stake total. Il prélève sa
+  commission, le reste va à ses délégants (lui compris) au prorata.
+- Ce qui n'est pas versé retourne au réservoir.
+- Les propositions de blocs ne sont pas rémunérées à part : le proposeur
+  reçoit déjà 20 % des frais du bloc.
 - Le plafond ne peut jamais être dépassé : la forge est toujours inférieure au
   réservoir.
 
@@ -207,6 +251,5 @@ aucune clé d'administration.
 ## 10. Questions encore ouvertes
 
 1. Nom définitif et nom de l'unité.
-2. Commission maximale des validateurs.
-3. Nombre et identité des validateurs d'amorçage.
-4. Réglage de la difficulté initiale et de la cible de parts après un testnet.
+2. Nombre et identité des validateurs d'amorçage.
+3. Réglage de la difficulté initiale et de la cible de parts après un testnet.

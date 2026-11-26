@@ -34,6 +34,7 @@ fn block<'a>(
         txs,
         shares: &[],
         proposer,
+        last_commit: None,
         block_bytes: bytes,
     }
 }
@@ -334,15 +335,6 @@ fn multisig_two_of_three() {
         s.apply_tx(&build(&t3, &[0, 1]), &p),
         Err(TxError::Malformed(_))
     ));
-}
-
-#[test]
-fn staking_transactions_are_not_yet_supported() {
-    let mut alice = User::new();
-    let p = Address::from_bytes([9; 20]);
-    let mut s = funded(&alice, 10);
-    let stx = alice.tx(&s, TxBody::Leave, true);
-    assert_eq!(s.apply_tx(&stx, &p), Err(TxError::NotYetSupported));
 }
 
 #[test]

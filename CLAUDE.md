@@ -25,8 +25,10 @@ Monnaie minimaliste en Rust : une seule fonction, envoyer de la valeur.
   parts (`MintShare`), 150 M de pièces partagées tous les 50 blocs.
 - Bascule vers la preuve d'enjeu par simple changement de règle de sélection
   des validateurs.
-- Phase 2 : preuve d'enjeu avec délégation, plafond de 10 % de vote par
-  validateur, économie « melt & forge » (`forge = réservoir / 89 478 485`, frais
+- Phase 2 : preuve d'enjeu avec délégation. Vote à poids égal entre les 21
+  validateurs les mieux classés par stake (10 000 pièces de stake propre au
+  minimum) ; commission de 10 % au plus ; forge partagée chaque jour ;
+  économie « melt & forge » (`forge = réservoir / 89 478 485`, frais
   80 % fondus et 20 % au proposeur).
 - Consensus BFT de type **Tendermint**. Ce n'est pas un algorithme maison :
   ne jamais le présenter comme tel.
@@ -39,7 +41,8 @@ Monnaie minimaliste en Rust : une seule fonction, envoyer de la valeur.
 | `uturoa-crypto` | Clés ed25519 typées, adresses `utu1…`, BLAKE3, Merkle, étiquettes de domaine `utu/…` |
 | `uturoa-core` | Montants et constantes d'émission, comptes et multisignatures, transactions, parts de frappe, blocs, votes, paramètres |
 | `uturoa-consensus` | Moteur Tendermint (machine à états pure), garde anti-double signature, preuves d'équivoque |
-| `uturoa-state` | Machine d'état : comptes, réserve, envois, multisignatures, frais dynamiques, melt, frappe (parts, partage, difficulté ; RandomX abstrait par `PowHasher`), forge mise de côté dans `pending_rewards` |
+| `uturoa-state` | Machine d'état : comptes, réserve, envois, multisignatures, frais dynamiques, melt, frappe (parts, partage, difficulté ; RandomX abstrait par `PowHasher`), forge (partagée par `staking`) |
+| `uturoa-state::staking` | Validateurs, délégation, présence (certificat du bloc précédent), mise à l'écart, restitution, double signature, récompenses par époque, signal de mise à jour, bascule |
 | `uturoa-pow` | RandomX (crate `randomx-rs`, C++ : il faut CMake et un compilateur C++) : vérification en mode léger et minage |
 | `uturoa-keystore` | Fichiers de clés chiffrés ; mot de passe par `UTUROA_KEY_PASSWORD` ou fichier |
 
@@ -70,13 +73,15 @@ cargo test -q --release -p uturoa-state --test mint -- --ignored   # parcourt to
   recalcule la racine de tous les comptes : simple et correct, mais en O(n).
   À remplacer par un arbre de Merkle incrémental et un journal de
   modifications au lot 5 (nœud).
-- Les unités forgées s'accumulent dans `pending_rewards` : leur partage entre
-  validateurs et délégants viendra au lot 4.
+- Le vote est à poids égal (le moteur compte les validateurs, pas le stake).
+  Passer à un vote pondéré demanderait de modifier le moteur de consensus.
+- `Leave` est définitif : un opérateur parti ne peut pas se réinscrire avec
+  la même adresse.
+- Pour tester la bascule sans 1 314 000 blocs, les tests raccourcissent la
+  phase 1 avec `set_phase_end_for_tests` (jamais utilisé par le protocole).
 - Si RandomX échoue localement, `RandomXHasher` renvoie une empreinte qui ne
   satisfait aucune cible : le nœud refuse la part (risque de blocage, jamais
   d'acceptation à tort).
-- Les transactions de validation (0x04 à 0x0B) renvoient `NotYetSupported`
-  jusqu'au lot 4.
 
 ## 7. Feuille de route
 
@@ -86,7 +91,7 @@ cargo test -q --release -p uturoa-state --test mint -- --ignored   # parcourt to
 | 1 | `uturoa-core` : blocs, votes, paramètres, transactions de la liste fermée ; moteur de consensus | fait |
 | 2 | État : comptes, envoi, multisignatures, frais, melt & forge | fait |
 | 3 | Frappe RandomX : `MintShare`, partage par période, difficulté | fait |
-| 4 | Preuve d'enjeu : délégation, sélection, plafond de vote, sanctions, bascule | à faire |
+| 4 | Preuve d'enjeu : délégation, sélection, plafond de vote, sanctions, bascule | fait |
 | 5 | Nœud : réseau, stockage, synchronisation par instantané, API, explorateur | à faire |
 | 6 | Portefeuilles (bureau avec mineur intégré, mobile) | à faire |
 | 7 | Testnet public, fuzzing, essais de panne, répétition complète frappe → bascule | à faire |
