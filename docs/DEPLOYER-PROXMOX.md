@@ -76,25 +76,39 @@ done
 
 ## 4. Installer chaque validateur
 
-Pour Cinnamon (N = 1). Recommencer avec les autres en changeant `N` et `IP` :
+Chaque validateur reçoit **sa propre** clé, son identité réseau et son
+service : le numéro `N` doit correspondre à l'IP. La boucle ci-dessous fait
+l'association pour les quatre ; ne pas la remplacer par un `N` fixe, sinon
+les quatre machines auraient la même clé et la chaîne resterait à la
+hauteur 0.
 
-| N | IP |
-|---|---|
-| 1 | 192.168.1.22 |
-| 2 | 192.168.1.21 |
-| 3 | 192.168.1.23 |
-| 4 | 192.168.1.233 |
+| N | Nom | IP |
+|---|---|---|
+| 1 | Cinnamon | 192.168.1.22 |
+| 2 | Amber | 192.168.1.21 |
+| 3 | Obsidian | 192.168.1.23 |
+| 4 | Pearl | 192.168.1.233 |
 
 ```bash
-N=1; IP=192.168.1.22
-ssh root@$IP "id uturoa >/dev/null 2>&1 || useradd --system --home /var/lib/uturoa --shell /usr/sbin/nologin uturoa; mkdir -p /opt/uturoa /var/lib/uturoa /etc/uturoa"
-scp uturoa-node testnet/genesis.json root@$IP:/opt/uturoa/
-scp testnet/validator-$N.json root@$IP:/opt/uturoa/validator.json
-scp testnet/d$N/network.key root@$IP:/var/lib/uturoa/network.key
-scp testnet/uturoa-$N.service root@$IP:/etc/systemd/system/uturoa.service
-ssh root@$IP "printf 'UTUROA_KEY_PASSWORD=%s\n' '$UTUROA_KEY_PASSWORD' > /etc/uturoa/env \
-  && chown -R uturoa:uturoa /var/lib/uturoa /opt/uturoa/validator.json \
-  && chmod 700 /var/lib/uturoa && chmod 600 /etc/uturoa/env /opt/uturoa/validator.json /var/lib/uturoa/network.key"
+for pair in 1:192.168.1.22 2:192.168.1.21 3:192.168.1.23 4:192.168.1.233; do
+  N=${pair%%:*}; IP=${pair#*:}; echo "== validateur $N sur $IP"
+  ssh root@$IP "id uturoa >/dev/null 2>&1 || useradd --system --home /var/lib/uturoa --shell /usr/sbin/nologin uturoa; mkdir -p /opt/uturoa /var/lib/uturoa /etc/uturoa"
+  scp uturoa-node testnet/genesis.json root@$IP:/opt/uturoa/
+  scp testnet/validator-$N.json root@$IP:/opt/uturoa/validator.json
+  scp testnet/d$N/network.key root@$IP:/var/lib/uturoa/network.key
+  scp testnet/uturoa-$N.service root@$IP:/etc/systemd/system/uturoa.service
+  ssh root@$IP "printf 'UTUROA_KEY_PASSWORD=%s\n' '$UTUROA_KEY_PASSWORD' > /etc/uturoa/env \
+    && chown -R uturoa:uturoa /var/lib/uturoa /opt/uturoa/validator.json \
+    && chmod 700 /var/lib/uturoa && chmod 600 /etc/uturoa/env /opt/uturoa/validator.json /var/lib/uturoa/network.key"
+done
+```
+
+Contrôle : chaque machine doit afficher **son** nom.
+
+```bash
+for IP in 192.168.1.22 192.168.1.21 192.168.1.23 192.168.1.233; do
+  printf "%-15s" $IP; ssh root@$IP "grep -o 'Uturoa [A-Za-z]*' /etc/systemd/system/uturoa.service"
+done
 ```
 
 **Démarrer** une fois les quatre installés :
@@ -118,6 +132,11 @@ ssh root@192.168.1.22 "journalctl -u uturoa -n 20 --no-pager"
 
 Attendu : quatre hauteurs égales (à un bloc près), qui augmentent de 5 par
 minute ; des lignes `bloc validé ... round=0` dans les journaux.
+
+**Si les hauteurs restent à 0** : vérifier le contrôle de la section 4. Si
+deux machines portent le même nom, elles ont la même clé ; relancer la boucle
+de la section 4 après `systemctl stop uturoa; rm -f /var/lib/uturoa/chain.redb`
+sur les machines concernées, puis redémarrer les quatre.
 
 ## 6. Nœud public sur Copper
 
